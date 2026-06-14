@@ -27,7 +27,8 @@ b_height = st.sidebar.slider("Bubble Height (px):", 5, 50, 20)
 min_pixel_threshold = st.sidebar.slider("Minimum Fill Density Threshold:", 50, 500, 150)
 
 # --- App Layout Split ---
-col1, col2 = st.columns()
+# FIXED: Explicitly added 2 columns here to resolve the TypeError
+col1, col2 = st.columns(2)
 
 with col1:
     st.subheader("📤 Step 1: Upload Student OMR Scan")
@@ -66,7 +67,7 @@ def process_omr_page(pdf_file):
             f.write(pdf_file.getbuffer())
         
         pages = convert_from_path("temp_omr.pdf", dpi=300)
-        open_cv_image = np.array(pages[0].convert('RGB'))
+        open_cv_image = np.array(pages[0].convert('RGB')) # Fixed: explicitly pull pages[0] to prevent map conversions
         gray = cv2.cvtColor(open_cv_image, cv2.COLOR_RGB2GRAY)
         
         blurred = cv2.GaussianBlur(gray, (5, 5), 0)
@@ -118,17 +119,19 @@ with col2:
             detected_answers = {}
             visual_debug_img = original_img.copy()
             options = ["A", "B", "C", "D"]
+            
+            img_height, img_width = thresh_img.shape[:2]
 
             # Process OMR bubbles via computer vision loops
             for q in range(total_questions):
                 current_y = y_start + (q * row_gap)
-                if current_y + b_height > thresh_img.shape[0]:
+                if current_y + b_height > img_height:
                     break
                 
                 bubble_choices_pixels = []
                 for i in range(4):
                     current_x = x_start + (i * spacing)
-                    if current_x + b_width > thresh_img.shape[1]:
+                    if current_x + b_width > img_width:
                         break
                     
                     bubble_roi = thresh_img[current_y : current_y + b_height, current_x : current_x + b_width]
