@@ -15,99 +15,16 @@ from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 import pytesseract
 
 # ═══════════════════════════════════════════════════════════════
-#  ✅ ANSWER KEYS — Update these when officially released
-#     Format: 100 answers in order Q1→Q100, values: 'A','B','C','D'
+#  ✅ ANSWER KEYS — Fill these with 100 answers ('A'/'B'/'C'/'D')
+#     per version once the official key is released.
+#     Currently EMPTY ('-') so you can test OMR extraction only.
 # ═══════════════════════════════════════════════════════════════
 
 ANSWER_KEYS = {
-    "A1": [
-        # Q1  -  Q10
-        'A','B','C','D','A','B','C','D','A','B',
-        # Q11 -  Q20
-        'C','D','A','B','C','D','A','B','C','D',
-        # Q21 -  Q30
-        'A','B','C','D','A','B','C','D','A','B',
-        # Q31 -  Q40
-        'C','D','A','B','C','D','A','B','C','D',
-        # Q41 -  Q50
-        'A','B','C','D','A','B','C','D','A','B',
-        # Q51 -  Q60
-        'C','D','A','B','C','D','A','B','C','D',
-        # Q61 -  Q70
-        'A','B','C','D','A','B','C','D','A','B',
-        # Q71 -  Q80
-        'C','D','A','B','C','D','A','B','C','D',
-        # Q81 -  Q90
-        'A','B','C','D','A','B','C','D','A','B',
-        # Q91 - Q100
-        'C','D','A','B','C','D','A','B','C','D',
-    ],
-    "B1": [
-        # Q1  -  Q10
-        'B','C','D','A','B','C','D','A','B','C',
-        # Q11 -  Q20
-        'D','A','B','C','D','A','B','C','D','A',
-        # Q21 -  Q30
-        'B','C','D','A','B','C','D','A','B','C',
-        # Q31 -  Q40
-        'D','A','B','C','D','A','B','C','D','A',
-        # Q41 -  Q50
-        'B','C','D','A','B','C','D','A','B','C',
-        # Q51 -  Q60
-        'D','A','B','C','D','A','B','C','D','A',
-        # Q61 -  Q70
-        'B','C','D','A','B','C','D','A','B','C',
-        # Q71 -  Q80
-        'D','A','B','C','D','A','B','C','D','A',
-        # Q81 -  Q90
-        'B','C','D','A','B','C','D','A','B','C',
-        # Q91 - Q100
-        'D','A','B','C','D','A','B','C','D','A',
-    ],
-    "C1": [
-        # Q1  -  Q10
-        'C','D','A','B','C','D','A','B','C','D',
-        # Q11 -  Q20
-        'A','B','C','D','A','B','C','D','A','B',
-        # Q21 -  Q30
-        'C','D','A','B','C','D','A','B','C','D',
-        # Q31 -  Q40
-        'A','B','C','D','A','B','C','D','A','B',
-        # Q41 -  Q50
-        'C','D','A','B','C','D','A','B','C','D',
-        # Q51 -  Q60
-        'A','B','C','D','A','B','C','D','A','B',
-        # Q61 -  Q70
-        'C','D','A','B','C','D','A','B','C','D',
-        # Q71 -  Q80
-        'A','B','C','D','A','B','C','D','A','B',
-        # Q81 -  Q90
-        'C','D','A','B','C','D','A','B','C','D',
-        # Q91 - Q100
-        'A','B','C','D','A','B','C','D','A','B',
-    ],
-    "D1": [
-        # Q1  -  Q10
-        'D','A','B','C','D','A','B','C','D','A',
-        # Q11 -  Q20
-        'B','C','D','A','B','C','D','A','B','C',
-        # Q21 -  Q30
-        'D','A','B','C','D','A','B','C','D','A',
-        # Q31 -  Q40
-        'B','C','D','A','B','C','D','A','B','C',
-        # Q41 -  Q50
-        'D','A','B','C','D','A','B','C','D','A',
-        # Q51 -  Q60
-        'B','C','D','A','B','C','D','A','B','C',
-        # Q61 -  Q70
-        'D','A','B','C','D','A','B','C','D','A',
-        # Q71 -  Q80
-        'B','C','D','A','B','C','D','A','B','C',
-        # Q81 -  Q90
-        'D','A','B','C','D','A','B','C','D','A',
-        # Q91 - Q100
-        'B','C','D','A','B','C','D','A','B','C',
-    ],
+    "A1": ['-'] * 100,
+    "B1": ['-'] * 100,
+    "C1": ['-'] * 100,
+    "D1": ['-'] * 100,
 }
 
 # ─────────────────────────── Page Config ───────────────────────────
@@ -267,6 +184,8 @@ def calculate_results(student_answers, key_answers):
     for i, (sa, ka) in enumerate(zip(student_answers, key_answers), start=1):
         if sa == '-' or sa == '':
             status = 'skipped'; marks = 0; skipped += 1
+        elif ka == '-' or ka == '':
+            status = 'wrong'; marks = 0; wrong += 1
         elif sa == ka:
             status = 'correct'; marks = 1; correct += 1
         else:
@@ -427,9 +346,8 @@ with st.sidebar:
     st.info("📌 100 Questions | MCQ | 1 mark each | Max 100 marks")
     st.markdown("---")
     st.markdown("### 🔑 Answer Key Status")
-    # Show which versions have real keys loaded
     st.markdown("""
-> ⚠️ **Placeholder keys loaded.**
+> ⚠️ **Answer keys are EMPTY right now (testing OMR extraction only).**
 > Update `ANSWER_KEYS` in code once official keys are released.
     """)
     st.markdown("---")
@@ -475,6 +393,13 @@ with col1:
 
                 answered = sum(1 for a in letter_answers if a != '-')
                 st.markdown(f"**Detected:** {answered} answered · {100-answered} skipped")
+
+                with st.expander("🔍 View raw detected answers (Q1-Q100)"):
+                    preview_df = pd.DataFrame({
+                        "Q#": list(range(1, 101)),
+                        "Detected": letter_answers
+                    })
+                    st.dataframe(preview_df, use_container_width=True, hide_index=True, height=300)
             except Exception as e:
                 st.error(f"Error processing OMR: {e}")
     st.markdown('</div>', unsafe_allow_html=True)
@@ -495,10 +420,12 @@ with col2:
     version = st.selectbox("📋 Answer Version / Set",
                              ["A1", "B1", "C1", "D1"], index=0)
 
-    # Show key preview for selected version
     key = ANSWER_KEYS[version]
-    st.markdown(f"**Key preview for {version}:** "
-                + "  ".join([f"Q{i+1}:{a}" for i, a in enumerate(key[:10])]) + "  ...")
+    if all(a == '-' for a in key):
+        st.markdown('<span class="key-status-wait">⚠️ Key not loaded yet for this version</span>', unsafe_allow_html=True)
+    else:
+        st.markdown(f"**Key preview for {version}:** "
+                    + "  ".join([f"Q{i+1}:{a}" for i, a in enumerate(key[:10])]) + "  ...")
 
     st.session_state.student_info = {
         "name":    student_name,
@@ -517,6 +444,8 @@ if st.button("🔍 Analyze OMR & Calculate Score", use_container_width=True):
         st.warning("⚠️ Please upload an OMR PDF first.")
     else:
         key_answers = ANSWER_KEYS[version]
+        if all(a == '-' for a in key_answers):
+            st.info("ℹ️ Answer key for this version is empty — scores will show as 0/100 until you add the key in code. OMR extraction results are shown above/below.")
         with st.spinner("Comparing answers..."):
             results, correct, wrong, skipped = calculate_results(
                 st.session_state.omr_answers, key_answers)
