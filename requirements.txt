@@ -1,5 +1,9 @@
-opencv-python-headless
-numpy
-pdf2image
-pypdf
-streamlit
+streamlit>=1.32.0
+opencv-python-headless>=4.9.0
+numpy>=1.24.0
+Pillow>=10.0.0
+pdf2image>=1.17.0
+pytesseract>=0.3.10
+reportlab>=4.1.0
+pdfplumber>=0.10.0
+pandas>=2.0.0
