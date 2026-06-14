@@ -27,7 +27,7 @@ b_height = st.sidebar.slider("Bubble Height (px):", 5, 50, 20)
 min_pixel_threshold = st.sidebar.slider("Minimum Fill Density Threshold:", 50, 500, 150)
 
 # --- App Layout Split ---
-col1, col2 = st.columns([1, 1])
+col1, col2 = st.columns()
 
 with col1:
     st.subheader("📤 Step 1: Upload Student OMR Scan")
@@ -38,7 +38,7 @@ with col1:
 
 # --- Core Helper Processing Engines ---
 def extract_candidate_metadata(pdf_file):
-    """Parses digital text inside the PDF to pull Candidate Name and Registration ID."""
+    """Parses digital text inside the PDF safely without breaking if text is missing."""
     try:
         pdf_file.seek(0)
         reader = pypdf.PdfReader(pdf_file)
@@ -51,15 +51,15 @@ def extract_candidate_metadata(pdf_file):
         name_match = re.search(r"(?:Candidate\s*Name|Name\s*of\s*the\s*Candidate)\s*:\s*([^\n]+)", full_text, re.IGNORECASE)
         reg_match = re.search(r"(?:Registration\s*Number|Reg\s*No|Roll\s*No)\s*:\s*([A-Z0-9]+)", full_text, re.IGNORECASE)
         
-        candidate_name = name_match.group(1).strip() if name_match else "NOT FOUND (Manual Check)"
-        reg_number = reg_match.group(1).strip() if reg_match else "NOT FOUND (Manual Check)"
+        candidate_name = name_match.group(1).strip() if name_match else "Scanned Document (Name Not Readable)"
+        reg_number = reg_match.group(1).strip() if reg_match else "Scanned Document (ID Not Readable)"
         
         return candidate_name, reg_number
     except Exception:
-        return "Not Found", "Not Found"
+        return "Unknown Candidate", "Unknown Reg No"
 
 def process_omr_page(pdf_file):
-    """Converts PDF first page to grayscale and applies user's exact processing threshold pipeline."""
+    """Converts PDF page to grayscale and applies user's exact threshold pipeline safely."""
     try:
         pdf_file.seek(0)
         with open("temp_omr.pdf", "wb") as f:
@@ -80,11 +80,11 @@ def process_omr_page(pdf_file):
             
         return thresh, open_cv_image
     except Exception as e:
-        st.error(f"Failed parsing image buffer: {e}")
+        st.error(f"Error handling image transformation pipelines: {e}")
         return None, None
 
 def parse_answer_key(uploaded_file):
-    """Parses plain text comma/newline key lists."""
+    """Parses plain text comma/newline key lists cleanly."""
     if uploaded_file is None:
         return {}
     try:
@@ -98,7 +98,7 @@ def parse_answer_key(uploaded_file):
             if ":" in item:
                 q_num, ans = item.split(":")
                 parsed_keys[int(q_num)] = ans.upper()
-            elif item in ["A", "B", "C", "D"]:
+            elif item.upper() in ["A", "B", "C", "D"]:
                 parsed_keys[idx] = item.upper()
                 idx += 1
         return parsed_keys
@@ -111,7 +111,6 @@ with col2:
     st.subheader("📊 Processing & Evaluation Results")
     
     if omr_file:
-        # Step A: Process OMR First
         thresh_img, original_img = process_omr_page(omr_file)
         student_name, registration_id = extract_candidate_metadata(omr_file)
         
@@ -120,7 +119,7 @@ with col2:
             visual_debug_img = original_img.copy()
             options = ["A", "B", "C", "D"]
 
-            # Process OMR bubbles via computer vision
+            # Process OMR bubbles via computer vision loops
             for q in range(total_questions):
                 current_y = y_start + (q * row_gap)
                 if current_y + b_height > thresh_img.shape[0]:
@@ -129,20 +128,26 @@ with col2:
                 bubble_choices_pixels = []
                 for i in range(4):
                     current_x = x_start + (i * spacing)
+                    if current_x + b_width > thresh_img.shape[1]:
+                        break
+                    
                     bubble_roi = thresh_img[current_y : current_y + b_height, current_x : current_x + b_width]
-                    total_pixels = cv2.countNonZero(bubble_roi)
+                    total_pixels = cv2.countNonZero(bubble_roi) if bubble_roi.size > 0 else 0
                     bubble_choices_pixels.append(total_pixels)
                     
                     cv2.rectangle(visual_debug_img, (current_x, current_y), 
                                   (current_x + b_width, current_y + b_height), (0, 255, 0), 2)
 
-                chosen_index = np.argmax(bubble_choices_pixels)
-                if bubble_choices_pixels[chosen_index] > min_pixel_threshold:
-                    detected_answers[q + 1] = options[chosen_index]
+                if len(bubble_choices_pixels) == 4:
+                    chosen_index = np.argmax(bubble_choices_pixels)
+                    if bubble_choices_pixels[chosen_index] > min_pixel_threshold:
+                        detected_answers[q + 1] = options[chosen_index]
+                    else:
+                        detected_answers[q + 1] = "Blank"
                 else:
                     detected_answers[q + 1] = "Blank"
 
-            # Display candidate profile once OMR is parsed
+            # Display metadata panel profile
             st.markdown(f"""
             <div style="background-color:#1E1E1E; padding: 15px; border-radius: 8px; border-left: 5px solid #1E88E5; margin-bottom: 15px;">
                 <h4 style="margin: 0; color: #FFF;">👤 Name: {student_name}</h4>
@@ -150,11 +155,11 @@ with col2:
             </div>
             """, unsafe_allow_html=True)
 
-            # Step B: Check if Answer Key is provided yet
+            # Conditional Step Check Matrix 
             if not key_file:
-                st.warning("⚠️ OMR processing complete. Awaiting Official Key Answer file to run final score evaluation.")
+                st.warning("⚠️ OMR sheet scanned. Awaiting Official Key Answer file to evaluate rules.")
                 
-                # Show partial table containing ONLY the scanned answers first
+                # Show only scanned answers layout safely first
                 omr_only_table = []
                 for q_num in range(1, total_questions + 1):
                     omr_only_table.append({
@@ -164,14 +169,14 @@ with col2:
                 st.dataframe(omr_only_table, height=350, use_container_width=True)
                 
             else:
-                # Step C: Answer Key Uploaded -> Run Full Matching Evaluation
+                # Key File Exists -> Perform Full Match Comparison Sequential Table
                 answer_keys = parse_answer_key(key_file)
                 total_earned_score = 0
                 final_evaluation_table = []
                 
                 for q_num in range(1, total_questions + 1):
                     student_ans = detected_answers.get(q_num, "Blank")
-                    correct_ans = answer_keys.get(q_num, "A") # Fallback default to avoid breakage
+                    correct_ans = answer_keys.get(q_num, "A")  # Default placeholder
                     
                     is_correct = (student_ans == correct_ans)
                     
@@ -183,7 +188,7 @@ with col2:
                         right_or_wrong = "Wrong" if student_ans != "Blank" else "Unattempted"
                         score_value = 0
                     
-                    # Strictly aligned column sequence as requested
+                    # Exact sequence matching user expectations
                     final_evaluation_table.append({
                         "Question No.": f"Question {q_num}",
                         "OMR Answer": student_ans,
@@ -192,18 +197,15 @@ with col2:
                         "Score": f"{score_value} Mark"
                     })
                 
-                # Display final computed KPI score metrics
                 st.success("✅ Evaluation complete!")
-                st.metric(label="Total Score", value=f"{total_earned_score} / {total_questions} Marks")
-                
-                # Render full requested sequential breakdown table
+                st.metric(label="Total Score Calculated", value=f"{total_earned_score} / {total_questions} Marks")
                 st.dataframe(final_evaluation_table, height=380, use_container_width=True)
 
     else:
-        st.info("💡 Awaiting OMR upload. Please upload the student's OMR PDF document on the left panel to begin scanning.")
+        st.info("💡 Awaiting OMR sheet upload. Please upload the PDF on the left panel.")
 
 # --- Visual Diagnostics Preview Layout ---
-if omr_file and thresh_img is not None:
+if omr_file and 'thresh_img' in locals() and thresh_img is not None:
     st.markdown("---")
     st.subheader("🔍 Scan Alignment Tracker Preview")
     preview_col1, preview_col2 = st.columns(2)
