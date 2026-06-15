@@ -18,7 +18,6 @@ import base64
 # ═══════════════════════════════════════════════════════════════
 #   ✅ ANSWER KEYS — Fill these with 100 answers ('A'/'B'/'C'/'D')
 #      per version once the official key is released.
-#      Currently EMPTY ('-') so you can test OMR extraction only.
 # ═══════════════════════════════════════════════════════════════
 
 ANSWER_KEYS = {
@@ -49,18 +48,15 @@ img_base64 = get_base64_image("kea_banner.jpg")
 
 # ─────────────────────────── CSS Styling ───────────────────────────
 if img_base64:
-    # Rich UI header with the uploaded image asset embedded dynamically
     header_bg = f"""
     background: linear-gradient(rgba(15, 23, 42, 0.75), rgba(15, 23, 42, 0.90)), 
                 url("data:image/jpeg;base64,{img_base64}") no-repeat center center;
     """
 else:
-    # Fallback premium dark gradient style if the image isn't detected yet
     header_bg = """
     background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
     """
 
-# Python f-string requires ALL literal CSS braces to be doubled {{ }}
 st.markdown(f"""
 <style>
     .main-header {{
@@ -115,37 +111,22 @@ st.markdown(f"""
         padding: 0.6rem 2rem; font-weight: 600; font-size: 1rem; width: 100%;
     }}
     div[data-testid="stButton"] > button:hover {{ opacity: 0.9; }}
-    .key-status-wait {{ background:#4a3000; color:#faad14; padding:6px 14px; border-radius:8px; font-weight:bold; }}
 
-    /* Mobile Responsive Custom Overrides */
     @media (max-width:768px){{
         .main-header {{
             padding: 1.5rem 1rem !important;
             background-position: center center !important;
         }}
-        .main-header h1 {{
-            font-size:1.4rem !important;
-            line-height: 1.3 !important;
-        }}
-        .main-header p {{
-            font-size:0.85rem !important;
-            margin-top: 0.6rem !important;
-            padding: 4px 12px !important;
-        }}
-        .score-big {{
-            font-size:2.2rem !important;
-        }}
-        .step-card {{
-            padding:1rem !important;
-        }}
-        .score-box {{
-            padding: 1rem !important;
-        }}
+        .main-header h1 {{ font-size:1.4rem !important; line-height: 1.3 !important; }}
+        .main-header p {{ font-size:0.85rem !important; margin-top: 0.6rem !important; padding: 4px 12px !important; }}
+        .score-big {{ font-size:2.2rem !important; }}
+        .step-card {{ padding:1rem !important; }}
+        .score-box {{ padding: 1rem !important; }}
     }}
 </style>
 """, unsafe_allow_html=True)
 
-# ─────────────────────────── Header ───────────────────────────
+# ─────────────────────────── Header Container ───────────────────────────
 st.markdown("""
 <div class="main-header">
   <h1>📝 PGCET OMR Answer Checker</h1>
@@ -153,17 +134,11 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Warning block displayed if image asset isn't added yet
 if not img_base64:
-    st.info("💡 Tip: To show the KEA graphic banner in the header container, drop your image file named `kea_banner.jpg` directly into this project's folder directory.")
-
-# ─────────────────────────── Session State ───────────────────────────
-for key in ["omr_answers", "student_info", "results"]:
-    if key not in st.session_state:
-        st.session_state[key] = None
+    st.info("💡 Tip: Save your visual banner element inside your project folder directory explicitly named as `kea_banner.jpg` to display your personalized header.")
 
 # ═══════════════════════════════════════════════════════════════
-#  OMR PROCESSING FUNCTIONS
+#  OMR DATA PROCESSING METHODS
 # ═══════════════════════════════════════════════════════════════
 
 def pdf_to_images(pdf_bytes):
@@ -177,112 +152,89 @@ def enhance_image(img_np):
     enhanced = clahe.apply(gray)
     denoised = cv2.fastNlMeansDenoising(enhanced, h=10)
     kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
-    sharpened = cv2.filter2D(denoised, -1, kernel)
-    return sharpened
+    return cv2.filter2D(denoised, -1, kernel)
 
 
 def extract_text_from_image(img_np):
-    pil_img = Image.fromarray(img_np)
-    text = pytesseract.image_to_string(
-        pil_img,
-        config='--oem 3 --psm 11'
-    )
-    return text
+    return pytesseract.image_to_string(Image.fromarray(img_np), config='--oem 3 --psm 11')
 
 
 def parse_student_info(ocr_text):
     info = {"name": "", "reg_no": ""}
     lines = [l.strip() for l in ocr_text.split('\n') if l.strip()]
+    
     for line in lines:
-        reg_match = re.search(r'\b(\d{6,12})\b', line)
-        if reg_match and not info["reg_no"]:
+        reg_match = re.search(r'\b(\d{9,12})\b', line)
+        if reg_match:
             info["reg_no"] = reg_match.group(1)
+            break
+            
+    if not info["reg_no"]:
+        for line in lines:
+            if "booklet" in line.lower() or "serial" in line.lower():
+                continue
+            reg_match = re.search(r'\b(\d{6,12})\b', line)
+            if reg_match:
+                info["reg_no"] = reg_match.group(1)
+                break
+
+    for line in lines:
         if re.match(r'^[A-Za-z\s\.]+$', line) and len(line) > 4 and not info["name"]:
-            if not any(kw in line.lower() for kw in ['version','set','exam','date','roll','reg','serial']):
+            if not any(kw in line.lower() for kw in ['version','set','exam','date','roll','reg','serial','authority','karnataka']):
                 info["name"] = line.title()
     return info
 
 
 def get_grid_crop(img_np):
     h, w = img_np.shape[:2]
-    y0, y1 = int(h * 0.49), int(h * 0.95)
-    x0, x1 = int(w * 0.30), int(w * 0.99)
-    return img_np[y0:y1, x0:x1]
+    return img_np[int(h * 0.49):int(h * 0.95), int(w * 0.30):int(w * 0.99)]
 
 
 def detect_row(gray_strip_full, x0, x1, y0, y1, expected=4):
     pad = max(1, int((y1 - y0) * 0.05))
     strip = gray_strip_full[int(y0) + pad:int(y1) - pad, int(x0):int(x1)]
     sh, sw = strip.shape
-    if sh < 5 or sw < 5:
-        return None
-    
-    thresh = cv2.adaptiveThreshold(
-        strip,
-        255,
-        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY_INV,
-        31,
-        15
-    )
+    if sh < 5 or sw < 5: return None
     
     circles = cv2.HoughCircles(strip, cv2.HOUGH_GRADIENT, dp=1, minDist=max(1, int(sw * 0.12)),
-                               param1=50, param2=15,
-                               minRadius=max(1, int(sh * 0.28)), maxRadius=max(2, int(sh * 0.48)))
-    if circles is None:
-        return None
+                               param1=50, param2=15, minRadius=max(1, int(sh * 0.28)), maxRadius=max(2, int(sh * 0.48)))
+    if circles is None: return None
     c = circles[0]
     c = c[c[:, 0] > sw * 0.12]
-    if len(c) < expected:
-        return None
+    if len(c) < expected: return None
     c = sorted(c, key=lambda p: p[0])
-    if len(c) > expected:
-        c = c[-expected:]
+    if len(c) > expected: c = c[-expected:]
     c = sorted(c, key=lambda p: p[0])
+    
     scores = []
     for (cx, cy, r) in c:
         rr = max(1, int(r * 0.6))
-        y0p, y1p = int(cy - rr), int(cy + rr)
-        x0p, x1p = int(cx - rr), int(cx + rr)
-        patch = strip[max(0, y0p):y1p, max(0, x0p):x1p]
+        patch = strip[max(0, int(cy - rr)):int(cy + rr), max(0, int(cx - rr)):int(cx + rr)]
         scores.append(patch.mean() if patch.size else 255)
     return scores
 
 
-def detect_omr_answers(img_np, num_questions=100, num_options=4):
+def detect_omr_answers(img_np, num_questions=100):
     crop = get_grid_crop(img_np)
     gray = cv2.cvtColor(crop, cv2.COLOR_RGB2GRAY)
     gh, gw = gray.shape
 
-    table_y0 = 0.0495 * gh
-    table_y1 = 0.9380 * gh
+    table_y0, table_y1 = 0.0495 * gh, 0.9380 * gh
     row_h = (table_y1 - table_y0) / 25
-
-    block_x = {
-        1: (0.0442 * gw, 0.2809 * gw),
-        2: (0.2809 * gw, 0.4718 * gw),
-        3: (0.4718 * gw, 0.7014 * gw),
-        4: (0.7014 * gw, 0.9045 * gw),
-    }
+    block_x = {1: (0.0442*gw, 0.2809*gw), 2: (0.2809*gw, 0.4718*gw), 3: (0.4718*gw, 0.7014*gw), 4: (0.7014*gw, 0.9045*gw)}
     qstart = {1: 1, 2: 26, 3: 51, 4: 76}
 
     answers_by_q = {}
     for b, (bx0, bx1) in block_x.items():
         for row in range(25):
             y0 = table_y0 + row * row_h
-            y1 = y0 + row_h
-            scores = detect_row(gray, bx0, bx1, y0, y1)
+            scores = detect_row(gray, bx0, bx1, y0, y0 + row_h)
             q = qstart[b] + row
             if scores is None:
                 answers_by_q[q] = -1
                 continue
             sorted_s = sorted(scores)
-            idx = int(np.argmin(scores))
-            gap = sorted_s[1] - sorted_s[0]
-            if gap < 6:
-                answers_by_q[q] = -1
-            else:
-                answers_by_q[q] = idx
+            answers_by_q[q] = int(np.argmin(scores)) if (sorted_s[1] - sorted_s[0]) >= 6 else -1
 
     return [answers_by_q.get(q, -1) for q in range(1, num_questions + 1)]
 
@@ -292,7 +244,7 @@ def answers_to_letters(answer_indices):
     return [mapping.get(a, '-') for a in answer_indices]
 
 # ═══════════════════════════════════════════════════════════════
-#  RESULT CALCULATION
+#  METRICS & EXPORTS
 # ═══════════════════════════════════════════════════════════════
 
 def calculate_results(student_answers, key_answers):
@@ -300,104 +252,78 @@ def calculate_results(student_answers, key_answers):
     correct = wrong = skipped = 0
     for i, (sa, ka) in enumerate(zip(student_answers, key_answers), start=1):
         if sa == '-' or sa == '':
-            status = 'skipped'; marks = 0; skipped += 1
+            status, marks, skipped = 'skipped', 0, skipped + 1
         elif ka == '-' or ka == '':
-            status = 'wrong'; marks = 0; wrong += 1
+            status, marks, wrong = 'wrong', 0, wrong + 1
         elif sa == ka:
-            status = 'correct'; marks = 1; correct += 1
+            status, marks, correct = 'correct', 1, correct + 1
         else:
-            status = 'wrong';   marks = 0; wrong   += 1
+            status, marks, wrong = 'wrong', 0, wrong + 1
         results.append({'q': i, 'student': sa, 'key': ka, 'status': status, 'marks': marks})
     return results, correct, wrong, skipped
 
-# ═══════════════════════════════════════════════════════════════
-#  RESULT PDF GENERATION
-# ═══════════════════════════════════════════════════════════════
 
 def generate_result_pdf(student_info, results, correct, wrong, skipped, version):
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4,
-                             rightMargin=15*mm, leftMargin=15*mm,
-                             topMargin=15*mm, bottomMargin=15*mm)
-    story = []
-    styles = getSampleStyleSheet()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=15*mm, leftMargin=15*mm, topMargin=15*mm, bottomMargin=15*mm)
+    story, styles = [], getSampleStyleSheet()
 
-    header_style = ParagraphStyle('header', fontSize=18, fontName='Helvetica-Bold',
-                                   alignment=TA_CENTER, textColor=colors.HexColor('#e94560'), spaceAfter=4)
-    sub_style    = ParagraphStyle('sub', fontSize=11, fontName='Helvetica',
-                                   alignment=TA_CENTER, textColor=colors.HexColor('#333333'), spaceAfter=2)
+    header_style = ParagraphStyle('header', fontSize=18, fontName='Helvetica-Bold', alignment=TA_CENTER, textColor=colors.HexColor('#e94560'), spaceAfter=4)
+    sub_style = ParagraphStyle('sub', fontSize=11, fontName='Helvetica', alignment=TA_CENTER, textColor=colors.HexColor('#333333'), spaceAfter=2)
     story.append(Paragraph("PGCET ENTRANCE EXAMINATION", header_style))
     story.append(Paragraph("Official OMR Answer Report", sub_style))
     story.append(HRFlowable(width="100%", thickness=2, color=colors.HexColor('#e94560')))
     story.append(Spacer(1, 8))
 
     info_data = [
-        ["Student Name",    ":", student_info.get("name",   "N/A"), "Version / Set",   ":", version],
-        ["Registration No.",":", student_info.get("reg_no", "N/A"), "Total Questions", ":", "100"],
+        ["Student Name", ":", student_info.get("name", "N/A"), "Version / Set", ":", version],
+        ["Registration No.", ":", student_info.get("reg_no", "N/A"), "Total Questions", ":", "100"],
     ]
     info_table = Table(info_data, colWidths=[38*mm, 5*mm, 55*mm, 38*mm, 5*mm, 35*mm])
     info_table.setStyle(TableStyle([
-        ('FONTNAME',  (0,0), (-1,-1), 'Helvetica'),
-        ('FONTNAME',  (0,0), (0,-1), 'Helvetica-Bold'),
-        ('FONTNAME',  (3,0), (3,-1), 'Helvetica-Bold'),
-        ('FONTSIZE',  (0,0), (-1,-1), 9),
+        ('FONTNAME', (0,0), (-1,-1), 'Helvetica'), ('FONTNAME', (0,0), (0,-1), 'Helvetica-Bold'),
+        ('FONTNAME', (3,0), (3,-1), 'Helvetica-Bold'), ('FONTSIZE', (0,0), (-1,-1), 9),
         ('ROWBACKGROUNDS', (0,0), (-1,-1), [colors.HexColor('#f0f4ff'), colors.white]),
-        ('BOX',       (0,0), (-1,-1), 0.5, colors.grey),
-        ('INNERGRID', (0,0), (-1,-1), 0.25, colors.lightgrey),
-        ('PADDING',   (0,0), (-1,-1), 5),
-        ('VALIGN',    (0,0), (-1,-1), 'MIDDLE'),
+        ('BOX', (0,0), (-1,-1), 0.5, colors.grey), ('INNERGRID', (0,0), (-1,-1), 0.25, colors.lightgrey),
+        ('PADDING', (0,0), (-1,-1), 5), ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
     ]))
     story.append(info_table)
     story.append(Spacer(1, 10))
 
     pct = round((correct / 100) * 100, 1)
-    if pct >= 70:   grade = "A (Excellent)"
-    elif pct >= 50: grade = "B (Good)"
-    elif pct >= 35: grade = "C (Pass)"
-    else:           grade = "D (Below Average)"
+    grade = "A (Excellent)" if pct >= 70 else "B (Good)" if pct >= 50 else "C (Pass)" if pct >= 35 else "D (Below Average)"
 
     score_data = [
         ["TOTAL SCORE", "CORRECT", "WRONG", "SKIPPED", "PERCENTAGE", "GRADE"],
         [
             Paragraph(f'<font size="20" color="#e94560"><b>{correct}/100</b></font>', styles['Normal']),
-            Paragraph(f'<font size="14" color="#52c41a"><b>{correct}</b></font>',     styles['Normal']),
-            Paragraph(f'<font size="14" color="#ff4d4f"><b>{wrong}</b></font>',         styles['Normal']),
-            Paragraph(f'<font size="14" color="#faad14"><b>{skipped}</b></font>',       styles['Normal']),
-            Paragraph(f'<font size="14"><b>{pct}%</b></font>',                          styles['Normal']),
-            Paragraph(f'<font size="11"><b>{grade}</b></font>',                         styles['Normal']),
+            Paragraph(f'<font size="14" color="#52c41a"><b>{correct}</b></font>', styles['Normal']),
+            Paragraph(f'<font size="14" color="#ff4d4f"><b>{wrong}</b></font>', styles['Normal']),
+            Paragraph(f'<font size="14" color="#faad14"><b>{skipped}</b></font>', styles['Normal']),
+            Paragraph(f'<font size="14"><b>{pct}%</b></font>', styles['Normal']),
+            Paragraph(f'<font size="11"><b>{grade}</b></font>', styles['Normal']),
         ]
     ]
     score_table = Table(score_data, colWidths=[30*mm]*6)
     score_table.setStyle(TableStyle([
-        ('FONTNAME',   (0,0), (-1,0), 'Helvetica-Bold'),
-        ('FONTSIZE',   (0,0), (-1,0), 8),
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1a1a2e')),
-        ('TEXTCOLOR',  (0,0), (-1,0), colors.white),
-        ('BACKGROUND', (0,1), (-1,1), colors.HexColor('#f0f4ff')),
-        ('ALIGN',      (0,0), (-1,-1), 'CENTER'),
-        ('VALIGN',     (0,0), (-1,-1), 'MIDDLE'),
-        ('BOX',        (0,0), (-1,-1), 1, colors.HexColor('#0f3460')),
-        ('INNERGRID',  (0,0), (-1,-1), 0.5, colors.HexColor('#cccccc')),
-        ('ROWHEIGHT',  (0,0), (-1,0), 18),
-        ('ROWHEIGHT',  (0,1), (-1,1), 30),
-        ('PADDING',    (0,0), (-1,-1), 5),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'), ('FONTSIZE', (0,0), (-1,0), 8),
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1a1a2e')), ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+        ('BACKGROUND', (0,1), (-1,1), colors.HexColor('#f0f4ff')), ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('BOX', (0,0), (-1,-1), 1, colors.HexColor('#0f3460')),
+        ('INNERGRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cccccc')), ('PADDING', (0,0), (-1,-1), 5),
     ]))
     story.append(score_table)
     story.append(Spacer(1, 12))
 
-    story.append(Paragraph("<b>Detailed Answer Analysis</b>",
-                            ParagraphStyle('head2', fontSize=11, fontName='Helvetica-Bold',
-                                           spaceAfter=6, textColor=colors.HexColor('#1a1a2e'))))
+    story.append(Paragraph("<b>Detailed Answer Analysis</b>", ParagraphStyle('h2', fontSize=11, fontName='Helvetica-Bold', spaceAfter=6, textColor=colors.HexColor('#1a1a2e'))))
 
     COLS = 5
-    header_row = ["Q#", "Your Ans", "Key Ans", "Result"] * COLS
-    rows = [header_row]
+    rows = [["Q#", "Your Ans", "Key Ans", "Result"] * COLS]
     chunk = []
     for r in results:
         color_tag = {'correct': '#52c41a', 'wrong': '#ff4d4f', 'skipped': '#faad14'}[r['status']]
-        symbol    = {'correct': '✓', 'wrong': '✗', 'skipped': '–'}[r['status']]
-        result_cell = Paragraph(
-            f'<font color="{color_tag}"><b>{symbol}</b></font>', styles['Normal'])
+        symbol = {'correct': '✓', 'wrong': '✗', 'skipped': '–'}[r['status']]
+        result_cell = Paragraph(f'<font color="{color_tag}"><b>{symbol}</b></font>', styles['Normal'])
         chunk.append([str(r['q']), r['student'], r['key'], result_cell])
         if len(chunk) == COLS:
             row = []
@@ -410,174 +336,144 @@ def generate_result_pdf(student_info, results, correct, wrong, skipped, version)
         while len(row) < COLS * 4: row += ["", "", "", ""]
         rows.append(row)
 
-    col_w = [8*mm, 14*mm, 14*mm, 12*mm] * COLS
-    ans_table = Table(rows, colWidths=col_w, repeatRows=1)
+    ans_table = Table(rows, colWidths=[8*mm, 14*mm, 14*mm, 12*mm] * COLS, repeatRows=1)
     ts = [
-        ('FONTNAME',   (0,0), (-1,0),  'Helvetica-Bold'),
-        ('FONTSIZE',   (0,0), (-1,-1), 7),
-        ('BACKGROUND', (0,0), (-1,0),  colors.HexColor('#0f3460')),
-        ('TEXTCOLOR',  (0,0), (-1,0),  colors.white),
-        ('ALIGN',      (0,0), (-1,-1), 'CENTER'),
-        ('VALIGN',     (0,0), (-1,-1), 'MIDDLE'),
-        ('BOX',        (0,0), (-1,-1), 0.5, colors.grey),
-        ('INNERGRID',  (0,0), (-1,-1), 0.25, colors.lightgrey),
-        ('ROWHEIGHT',  (0,0), (-1,-1), 10),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'), ('FONTSIZE', (0,0), (-1,-1), 7),
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#0f3460')), ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+        ('ALIGN', (0,0), (-1,-1), 'CENTER'), ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('BOX', (0,0), (-1,-1), 0.5, colors.grey), ('INNERGRID', (0,0), (-1,-1), 0.25, colors.lightgrey),
     ]
     for i in range(1, len(rows)):
-        bg = colors.HexColor('#f9f9f9') if i % 2 == 0 else colors.white
-        ts.append(('BACKGROUND', (0,i), (-1,i), bg))
+        ts.append(('BACKGROUND', (0,i), (-1,i), colors.HexColor('#f9f9f9') if i % 2 == 0 else colors.white))
     ans_table.setStyle(TableStyle(ts))
     story.append(ans_table)
     story.append(Spacer(1, 10))
 
     story.append(HRFlowable(width="100%", thickness=1, color=colors.grey))
-    story.append(Spacer(1, 4))
-    footer_style = ParagraphStyle('footer', fontSize=7, alignment=TA_CENTER, textColor=colors.grey)
-    story.append(Paragraph(
-        "This is a computer-generated report. Official marks are subject to verification by the examining authority.",
-        footer_style))
-    story.append(Paragraph(
-        f"PGCET OMR Checker  |  Reg No: {student_info.get('reg_no','N/A')}  |  Version: {version}",
-        footer_style))
+    footer_style = ParagraphStyle('foot', fontSize=7, alignment=TA_CENTER, textColor=colors.grey)
+    story.append(Paragraph("This is a computer-generated report. Official marks are subject to verification by the examining authority.", footer_style))
+    story.append(Paragraph(f"PGCET OMR Checker | Reg No: {student_info.get('reg_no','N/A')} | Version: {version}", footer_style))
 
     doc.build(story)
     buffer.seek(0)
     return buffer.read()
 
 # ═══════════════════════════════════════════════════════════════
-#  SIDEBAR
+#  RENDER APPLICATION LAYOUT
 # ═══════════════════════════════════════════════════════════════
 with st.sidebar:
-    st.markdown("### 📋 How to Use")
-    st.markdown("""
-1. **Upload OMR PDF** – Student's scanned OMR copy
-2. **Enter Student Details** – Name & Reg Number
-3. **Select Version** – A1 / B1 / C1 / D1
-4. **Analyze** – Click to compare & score
-5. **Download PDF** – Printable result report
-    """)
+    st.markdown("### 📋 System Information")
+    st.markdown("This app fully automated processing. Uploading an OMR automatically runs extraction, calculates evaluation, and renders immediate actions.")
     st.markdown("---")
-    st.markdown("### ℹ️ Exam Info")
-    st.info("📌 100 Questions | MCQ | 1 mark each | Max 100 marks")
-    st.markdown("---")
-    st.markdown("### 🔑 Answer Key Status")
-    st.markdown("""
-> ⚠️ **Answer keys are EMPTY right now (testing OMR extraction only).**
-> Update `ANSWER_KEYS` in code once official keys are released.
-    """)
+    version = st.selectbox("📋 Default Answer Key Version", ["A1", "B1", "C1", "D1"], index=0)
 
-# ═══════════════════════════════════════════════════════════════
-#  MAIN UI
-# ═══════════════════════════════════════════════════════════════
 col1, col2 = st.columns([1, 1], gap="large")
+
+# Use a tracking flag to know if we need to auto-calculate the final outputs
+run_analysis = False
 
 with col1:
     st.markdown('<div class="step-card">', unsafe_allow_html=True)
     st.markdown("#### <span class='step-label'>1</span> Upload Student OMR PDF", unsafe_allow_html=True)
 
-    omr_file = st.file_uploader("Upload OMR PDF", type=["pdf"],
-                                  key="omr_upload", label_visibility="collapsed")
+    omr_file = st.file_uploader("Upload OMR PDF", type=["pdf"], key="omr_upload", label_visibility="collapsed")
 
     if omr_file:
-        st.success("✅ OMR PDF uploaded!")
-        with st.spinner("🔍 Enhancing & reading OMR..."):
-            try:
-                pdf_bytes = omr_file.read()
-                images    = pdf_to_images(pdf_bytes)
-                grid_preview = get_grid_crop(images[0])
-                st.image(grid_preview, caption="Detected Answer Grid (Page 1)", use_container_width=True)
-
+        st.success("✅ OMR PDF detected!")
+        # Automatically process fields if not already done in the session cache
+        if "last_uploaded_file" not in st.session_state or st.session_state.last_uploaded_file != omr_file.name:
+            with st.spinner("⚡ Running Automated Real-Time Analysis..."):
                 try:
-                    ocr_text  = extract_text_from_image(images[0])
-                    auto_info = parse_student_info(ocr_text)
-                    st.session_state._auto_info = auto_info
-                except Exception:
-                    st.session_state._auto_info = {"name": "", "reg_no": ""}
-                    st.warning("⚠️ OCR not available — input details manually below.")
+                    pdf_bytes = omr_file.read()
+                    images = pdf_to_images(pdf_bytes)
+                    st.session_state.processed_img = get_grid_crop(images[0])
 
-                raw_answers    = detect_omr_answers(images[0])
-                letter_answers = answers_to_letters(raw_answers)
-                st.session_state.omr_answers = letter_answers
+                    try:
+                        ocr_text = extract_text_from_image(images[0])
+                        st.session_state.student_info = parse_student_info(ocr_text)
+                    except Exception:
+                        st.session_state.student_info = {"name": "", "reg_no": ""}
 
-                answered = sum(1 for a in letter_answers if a != '-')
-                st.markdown(f"**Detected:** {answered} answered · {100-answered} skipped")
-            except Exception as e:
-                st.error(f"Error processing OMR: {e}")
+                    letter_answers = answers_to_letters(detect_omr_answers(images[0]))
+                    st.session_state.omr_answers = letter_answers
+                    st.session_state.last_uploaded_file = omr_file.name
+                    run_analysis = True
+                except Exception as e:
+                    st.error(f"Error processing OMR: {e}")
+
+        if "processed_img" in st.session_state:
+            st.image(st.session_state.processed_img, caption="Detected Answer Grid Preview", use_container_width=True)
+            answered = sum(1 for a in st.session_state.omr_answers if a != '-')
+            st.markdown(f"**Live Count:** {answered} answered · {100-answered} skipped")
+            
     st.markdown('</div>', unsafe_allow_html=True)
 
 with col2:
     st.markdown('<div class="step-card">', unsafe_allow_html=True)
-    st.markdown("#### <span class='step-label'>2</span> Student Details & Version", unsafe_allow_html=True)
+    st.markdown("#### <span class='step-label'>2</span> Extracted Registration Profiles", unsafe_allow_html=True)
 
-    auto = getattr(st.session_state, '_auto_info', {})
-    student_name = st.text_input("👤 Student Name", value=auto.get("name", ""), placeholder="Enter full name")
-    student_reg  = st.text_input("🔢 Registration Number", value=auto.get("reg_no", ""), placeholder="e.g. 2026MBA501")
-    version = st.selectbox("📋 Answer Version / Set", ["A1", "B1", "C1", "D1"], index=0)
+    # Supply default values from auto-extracted state dictionary
+    current_info = st.session_state.student_info or {"name": "", "reg_no": ""}
+    student_name = st.text_input("👤 Student Name", value=current_info.get("name", ""), placeholder="Enter full name")
+    student_reg = st.text_input("🔢 Registration Number", value=current_info.get("reg_no", ""), placeholder="e.g. 249171118")
 
-    st.session_state.student_info = {"name": student_name, "reg_no": student_reg, "version": version}
+    # Sync interactive input changes directly back to state parameters
+    if st.session_state.student_info:
+        if st.session_state.student_info["name"] != student_name or st.session_state.student_info["reg_no"] != student_reg:
+            st.session_state.student_info = {"name": student_name, "reg_no": student_reg}
+            run_analysis = True
+            
     st.markdown('</div>', unsafe_allow_html=True)
 
 if st.session_state.omr_answers:
     st.markdown("---")
-    st.markdown("#### <span class='step-label'>4</span> Review and Correct Detected Answers", unsafe_allow_html=True)
-
+    st.markdown("#### 📝 Edit or Override Extracted Bubbles")
     edit_df = pd.DataFrame({"Q#": list(range(1, 101)), "Detected Answer": st.session_state.omr_answers})
     edited_df = st.data_editor(
-        edit_df, use_container_width=True, hide_index=True, height=250,
-        column_config={
-            "Q#": st.column_config.NumberColumn(disabled=True),
-            "Detected Answer": st.column_config.SelectboxColumn(options=["A", "B", "C", "D", "-"], required=True)
-        }, key="omr_editor"
+        edit_df, use_container_width=True, hide_index=True, height=200,
+        column_config={"Q#": st.column_config.NumberColumn(disabled=True), "Detected Answer": st.column_config.SelectboxColumn(options=["A", "B", "C", "D", "-"], required=True)}
     )
-    st.session_state.omr_answers = edited_df["Detected Answer"].tolist()
+    
+    # Trigger recalculation cleanly if user manually overrides a bubble value
+    if st.session_state.omr_answers != edited_df["Detected Answer"].tolist():
+        st.session_state.omr_answers = edited_df["Detected Answer"].tolist()
+        run_analysis = True
 
-st.markdown("---")
-st.markdown("#### <span class='step-label'>3</span> Analyze & Generate Score", unsafe_allow_html=True)
+# Automated calculation logic loop block execution 
+if run_analysis or (st.session_state.omr_answers and not st.session_state.results):
+    results, correct, wrong, skipped = calculate_results(st.session_state.omr_answers, ANSWER_KEYS[version])
+    st.session_state.results = {"details": results, "correct": correct, "wrong": wrong, "skipped": skipped}
 
-if st.button("🔍 Analyze OMR & Calculate Score", use_container_width=True):
-    if not st.session_state.omr_answers:
-        st.warning("⚠️ Please upload an OMR PDF first.")
-    else:
-        key_answers = ANSWER_KEYS[version]
-        with st.spinner("Comparing answers..."):
-            results, correct, wrong, skipped = calculate_results(st.session_state.omr_answers, key_answers)
-            st.session_state.results = {"details": results, "correct": correct, "wrong": wrong, "skipped": skipped}
-
+# ═══════════════════════════════════════════════════════════════
+#  AUTOMATED RESULTS PRESENTATION & PDF DELIVERY
+# ═══════════════════════════════════════════════════════════════
 if st.session_state.results:
     r = st.session_state.results
     correct, wrong, skipped, details = r["correct"], r["wrong"], r["skipped"], r["details"]
+    si = st.session_state.student_info or {"name": student_name, "reg_no": student_reg}
 
-    st.markdown("---")
-    st.markdown("### 🏆 Results")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.markdown(f'<div class="score-box"><div class="score-big">{correct}</div><div class="score-sub">✅ Score</div></div>', unsafe_allow_html=True)
-    c2.markdown(f'<div class="score-box"><div class="score-big" style="color:#52c41a">{correct}</div><div class="score-sub">Correct</div></div>', unsafe_allow_html=True)
-    c3.markdown(f'<div class="score-box"><div class="score-big" style="color:#ff4d4f">{wrong}</div><div class="score-sub">Wrong</div></div>', unsafe_allow_html=True)
-    c4.markdown(f'<div class="score-box"><div class="score-big" style="color:#faad14">{skipped}</div><div class="score-sub">Skipped</div></div>', unsafe_allow_html=True)
-
-    st.markdown("---")
-    st.markdown("#### 📋 Answer-by-Answer Breakdown")
-
-    display_rows = []
-    for row in details:
-        display_rows.append({
-            "Question": f"Q{row['q']}",
-            "Your Answer": row["student"],
-            "Key Answer": row["key"],
-            "Status": row["status"].upper(),
-            "Marks": row["marks"]
-        })
-
-    st.dataframe(pd.DataFrame(display_rows), use_container_width=True, hide_index=True)
-
-    st.markdown("---")
-    si = st.session_state.student_info or {}
+    # Generate printable PDF array bytes instantly behind the scenes
     pdf_bytes = generate_result_pdf(si, details, correct, wrong, skipped, version)
-    
+
+    st.markdown("---")
+    st.markdown("### 📥 Instant Automated Download Actions")
     st.download_button(
-        label="📥 Download PDF Report",
+        label="📥 DOWNLOAD OFFICIAL PDF SCORE REPORT", 
         data=pdf_bytes,
-        file_name=f"PGCET_Result_{si.get('reg_no','student')}_{version}.pdf",
-        mime="application/pdf",
+        file_name=f"PGCET_Automated_Result_{si.get('reg_no','student')}_{version}.pdf", 
+        mime="application/pdf", 
         use_container_width=True
     )
+
+    st.markdown("---")
+    st.markdown("### 🏆 Live Performance Scoreboard")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.markdown(f'<div class="score-box"><div class="score-big">{correct}</div><div class="score-sub">✅ Net Score</div></div>', unsafe_allow_html=True)
+    c2.markdown(f'<div class="score-box"><div class="score-big" style="color:#52c41a">{correct}</div><div class="score-sub">Correct Answers</div></div>', unsafe_allow_html=True)
+    c3.markdown(f'<div class="score-box"><div class="score-big" style="color:#ff4d4f">{wrong}</div><div class="score-sub">Wrong Answers</div></div>', unsafe_allow_html=True)
+    c4.markdown(f'<div class="score-box"><div class="score-big" style="color:#faad14">{skipped}</div><div class="score-sub">Omitted Items</div></div>', unsafe_allow_html=True)
+
+    st.markdown("---")
+    st.markdown("#### 📋 Question-by-Question Diagnostic Log")
+    display_rows = [{"Question": f"Q{row['q']}", "Your Answer": row["student"], "Key Answer": row["key"], "Status": row["status"].upper(), "Marks": row["marks"]} for row in details]
+    st.dataframe(pd.DataFrame(display_rows), use_container_width=True, hide_index=True)
