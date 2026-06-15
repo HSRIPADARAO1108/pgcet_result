@@ -25,7 +25,41 @@ ANSWER_KEYS = {
     "D1": ['-'] * 100,
 }
 
-st.set_page_config(page_title="PGCET Production OMR Engine", page_icon="📝", layout="wide")
+# ═══════════════════════════════════════════════════════════════
+#   🎯 LEVEL 5: IMMUTABLE COORDINATE MAP TEMPLATE (1200 x 1650 Canvas)
+# ═══════════════════════════════════════════════════════════════
+def generate_pgcet_template_map():
+    """
+    Generates precision fixed-coordinate mapping arrays for KEA PGCET layout.
+    Tracks 4 parallel vertical tracks of 25 questions each across a 1200x1650 canvas.
+    """
+    template_map = {}
+    
+    # Precise anchor starts for columns 1-25, 26-50, 51-75, 76-100
+    col_x_starts = [125, 410, 695, 980]
+    row_y_start = 760
+    row_gap = 32.5
+    bubble_gap = 31
+    
+    for block in range(4):
+        x_base = col_x_starts[block]
+        for row in range(25):
+            q_num = (block * 25) + row + 1
+            y_center = int(row_y_start + (row * row_gap))
+            
+            # Map four horizontal options (A, B, C, D) coordinates
+            options_coords = []
+            for opt in range(4):
+                x_center = int(x_base + (opt * bubble_gap))
+                options_coords.append((x_center, y_center))
+                
+            template_map[q_num] = options_coords
+            
+    return template_map
+
+QUESTION_MAP = generate_pgcet_template_map()
+
+st.set_page_config(page_title="PGCET Industrial Template Engine", page_icon="📝", layout="wide")
 
 # ─────────────────────────── Image Asset Loading ───────────────────────────
 def get_base64_image(image_path):
@@ -41,7 +75,7 @@ img_base64 = get_base64_image("kea_banner.jpg")
 header_bg = f'background: linear-gradient(rgba(15,23,42,0.75), rgba(15,23,42,0.9)), url("data:image/jpeg;base64,{img_base64}") center/cover;' if img_base64 else 'background: linear-gradient(135deg, #1a1a2e, #0f3460);'
 st.markdown(f"<style>.main-header {{{header_bg} padding: 3rem; text-align: center; border-radius: 12px; margin-bottom: 2rem; border: 1px solid #e94560;}} .main-header h1 {{color: white; margin:0;}} .main-header p {{color: white; background: #e94560; display:inline-block; padding:4px 16px; border-radius:20px; margin-top:10px;}} .step-card {{background: #16213e; padding: 1.5rem; border-radius: 10px; margin-bottom: 1rem; border: 1px solid #0f3460;}} .score-box {{background: #0f3460; padding: 1.5rem; text-align: center; border-radius: 12px; border: 1px solid #e94560;}}</style>", unsafe_allow_html=True)
 
-st.markdown('<div class="main-header"><h1>📝 PGCET Industrial OMR Grid Engine</h1><p>Dynamic Multi-Block Segmentation & Structural Analysis</p></div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header"><h1>📝 PGCET Industrial Template Engine</h1><p>Level 1-5 Production-Grade Coordinate Registration Architecture</p></div>', unsafe_allow_html=True)
 
 # ─────────────────────────── Session States ───────────────────────────
 for key in ["omr_answers", "student_info", "results"]:
@@ -49,12 +83,107 @@ for key in ["omr_answers", "student_info", "results"]:
         st.session_state[key] = None
 
 # ═══════════════════════════════════════════════════════════════
-#  🔥 DYNAMIC STRUCTURAL OMR EXTRACTION ENGINE
+#  🔥 THE FIVE LEVELS COMPUTER VISION ARCHITECTURE
 # ═══════════════════════════════════════════════════════════════
 
 def pdf_to_images(pdf_bytes):
     images = convert_from_bytes(pdf_bytes, dpi=300)
     return [np.array(img.convert("RGB")) for img in images]
+
+
+# LEVEL 1: Perspective Correction Transformation
+def four_point_transform(image, pts):
+    rect = np.zeros((4, 2), dtype="float32")
+    s = pts.sum(axis=1)
+    rect[0] = pts[np.argmin(s)]
+    rect[2] = pts[np.argmax(s)]
+
+    diff = np.diff(pts, axis=1)
+    rect[1] = pts[np.argmin(diff)]
+    rect[3] = pts[np.argmax(diff)]
+
+    (tl, tr, br, bl) = rect
+    
+    # Establish a rigid master digital viewport matrix canvas
+    maxWidth, maxHeight = 1200, 1650
+    
+    dst = np.array([
+        [0, 0],
+        [maxWidth - 1, 0],
+        [maxWidth - 1, maxHeight - 1],
+        [0, maxHeight - 1]
+    ], dtype="float32")
+
+    M = cv2.getPerspectiveTransform(rect, dst)
+    return cv2.warpPerspective(image, M, (maxWidth, maxHeight))
+
+
+# LEVEL 2 & 3: Page Contour Isolation & Adaptive Threshold Tracking
+def process_and_align_sheet(img_np):
+    gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
+    blur = cv2.GaussianBlur(gray, (5, 5), 0)
+    edged = cv2.Canny(blur, 75, 200)
+
+    cnts, _ = cv2.findContours(edged, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    cnts = sorted(cnts, key=cv2.contourArea, reverse=True)
+    paper = None
+
+    for c in cnts:
+        peri = cv2.arcLength(c, True)
+        approx = cv2.approxPolyDP(c, 0.02 * peri, True)
+        if len(approx) == 4:
+            paper = approx
+            break
+
+    # If the edge tracker fails due to low edge contrast, fall back on direct dimensions layout normalization
+    if paper is None:
+        H, W = img_np.shape[:2]
+        paper = np.array([[0, 0], [W, 0], [W, H], [0, H]])
+
+    warped_color = four_point_transform(img_np, paper.reshape(4, 2))
+    warped_gray = cv2.cvtColor(warped_color, cv2.COLOR_RGB2GRAY)
+    
+    # Clean up ink payloads with specialized adaptive tracking
+    thresh = cv2.adaptiveThreshold(
+        warped_gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+        cv2.THRESH_BINARY_INV, 25, 15
+    )
+    
+    return warped_color, thresh
+
+
+# LEVEL 4 & 5: Fixed Template Mapping & Density Extractions
+def extract_answers_via_template(warped_color, thresh):
+    detected_letters = []
+    mapping = {0: 'A', 1: 'B', 2: 'C', 3: 'D'}
+    canvas = warped_color.copy()
+
+    for q in range(1, 101):
+        scores = []
+        for option in range(4):
+            cx, cy = QUESTION_MAP[q][option]
+            
+            # Extract localized Region of Interest (ROI) bounding circle
+            roi = thresh[cy-11:cy+11, cx-11:cx+11]
+            score = cv2.countNonZero(roi)
+            scores.append(score)
+
+        sorted_scores = sorted(scores, reverse=True)
+        # Verify if bubble filling exceeds a standard target ink-mass density threshold
+        if sorted_scores[0] > 140:
+            # Enforce a strict difference gap margin between filled and empty selections
+            if (sorted_scores[0] - sorted_scores[1]) > 50:
+                chosen_opt = scores.index(sorted_scores[0])
+                detected_letters.append(mapping[chosen_opt])
+                
+                # Highlight recognized selections on the UI image canvas
+                tx, ty = QUESTION_MAP[q][chosen_opt]
+                cv2.circle(canvas, (tx, ty), 12, (233, 69, 96), 3)
+                continue
+                
+        detected_letters.append('-')
+
+    return detected_letters, canvas
 
 
 def extract_text_from_image(img_np):
@@ -76,93 +205,6 @@ def parse_student_info(ocr_text):
     return info
 
 
-def dynamically_segment_and_read_omr(img_np):
-    """
-    Finds the main structural answer grid contour on the page, 
-    isolates it completely, and slices it mathematically to read bubbles.
-    """
-    gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-    thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)[1]
-    
-    # 1. Find the parent enclosing answer box container layout
-    contours, _ = cv2.findContours(thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    
-    grid_box = None
-    if contours:
-        # Sort by area descending to target largest grid container blocks
-        contours = sorted(contours, key=cv2.contourArea, reverse=True)
-        for c in contours:
-            peri = cv2.arcLength(c, True)
-            approx = cv2.approxPolyDP(c, 0.02 * peri, True)
-            # Find a prominent 4-sided bounding table enclosure
-            if len(approx) == 4:
-                (x, y, w, h) = cv2.boundingRect(approx)
-                # Ensure it satisfies expected layout proportions for the lower half page grid block
-                if w > img_np.shape[1] * 0.5 and h > img_np.shape[0] * 0.3:
-                    grid_box = (x, y, w, h)
-                    break
-
-    # Fallback to structural anchor bounding if contour tracking fails 
-    if not grid_box:
-        H, W = img_np.shape[:2]
-        grid_box = (int(W * 0.1), int(H * 0.45), int(W * 0.85), int(H * 0.52))
-
-    x, y, w, h = grid_box
-    grid_crop_thresh = thresh[y:y+h, x:x+w]
-    grid_crop_color = img_np[y:y+h, x:x+w]
-    
-    # 2. Slice structural block layout dimensions into 4 explicit question columns
-    block_w = w / 4
-    row_h = h / 25
-    
-    detected_letters = []
-    
-    for block in range(4):
-        bx_start = int(block * block_w)
-        bx_end = int(bx_start + block_w)
-        
-        for row in range(25):
-            by_start = int(row * row_h)
-            by_end = int(by_start + row_h)
-            
-            # Isolate the question group row container block
-            row_roi = grid_crop_thresh[by_start:by_end, bx_start:bx_end]
-            
-            # Sub-slice the isolated row ROI into 4 bubble choices (A, B, C, D)
-            # We offset the first ~35% of the row length which usually holds the string labels (e.g., '26')
-            options_start_x = int(row_roi.shape[1] * 0.35)
-            options_width = row_roi.shape[1] - options_start_x
-            bubble_w = options_width / 4
-            
-            filled_pixel_scores = []
-            
-            for bubble_idx in range(4):
-                bb_x0 = int(options_start_x + (bubble_idx * bubble_w))
-                bb_x1 = int(bb_x0 + bubble_w)
-                
-                # Apply structural inner padding to drop bubble borders and look directly at filled ink payload
-                bubble_cell = row_roi[2:-2, bb_x0+2:bb_x1-2]
-                
-                if bubble_cell.size > 0:
-                    filled_pixel_scores.append(cv2.countNonZero(bubble_cell))
-                else:
-                    filled_pixel_scores.append(0)
-            
-            # Evaluation decision rule: select highest pixel mass with contrast variance verification
-            sorted_scores = sorted(filled_pixel_scores, reverse=True)
-            if len(sorted_scores) >= 2 and sorted_scores[0] > (bubble_w * row_h * 0.15):
-                # Ensure a clean margin drop between the chosen filled option and empty alternatives
-                if (sorted_scores[0] - sorted_scores[1]) > (bubble_w * row_h * 0.05):
-                    choice = filled_pixel_scores.index(sorted_scores[0])
-                    mapping = {0: 'A', 1: 'B', 2: 'C', 3: 'D'}
-                    detected_letters.append(mapping[choice])
-                    continue
-            detected_letters.append('-')
-            
-    return detected_letters, grid_crop_color
-
-
 def calculate_results(student_answers, key_answers):
     results = []
     correct = wrong = skipped = 0
@@ -173,6 +215,7 @@ def calculate_results(student_answers, key_answers):
         results.append({'q': i, 'student': sa, 'key': ka, 'status': status, 'marks': marks})
     return results, correct, wrong, skipped
 
+
 def generate_result_pdf(student_info, results, correct, wrong, skipped, version):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=15*mm, leftMargin=15*mm, topMargin=15*mm, bottomMargin=15*mm)
@@ -181,7 +224,7 @@ def generate_result_pdf(student_info, results, correct, wrong, skipped, version)
     h_style = ParagraphStyle('H', fontSize=18, fontName='Helvetica-Bold', alignment=TA_CENTER, textColor=colors.HexColor('#e94560'), spaceAfter=4)
     sub = ParagraphStyle('S', fontSize=11, fontName='Helvetica', alignment=TA_CENTER, spaceAfter=10)
     story.append(Paragraph("PGCET ENTRANCE EXAMINATION REPORT", h_style))
-    story.append(Paragraph("Dynamic Structural Computer Vision Grid Engine", sub))
+    story.append(Paragraph("Industrial Template Coordinate Mapping System", sub))
     story.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor('#e94560'), spaceAfter=10))
     
     info_data = [
@@ -240,16 +283,20 @@ with col1:
     if omr_file:
         st.success("✅ OMR File Received Successfully!")
         if "last_file" not in st.session_state or st.session_state.last_file != omr_file.name:
-            with st.spinner("🚀 Running Dynamic Matrix Analysis Framework..."):
+            with st.spinner("🚀 Performing Template Matrix Registration Analysis..."):
                 try:
                     raw_images = pdf_to_images(omr_file.read())
                     
-                    # Run structural column segmenting matrix analyzer
-                    answers, dynamic_crop = dynamically_segment_and_read_omr(raw_images[0])
-                    st.session_state.processed_img = dynamic_crop
+                    # Run Levels 1 to 3: Perspective Normalization
+                    warped_color, thresh = process_and_align_sheet(raw_images[0])
+                    
+                    # Run Levels 4 & 5: Static Structural Mapping Engine
+                    answers, verification_canvas = extract_answers_via_template(warped_color, thresh)
+                    
+                    st.session_state.processed_img = verification_canvas
                     st.session_state.omr_answers = answers
                     
-                    # Extract Registration profile
+                    # Profile Information Data Mining
                     ocr_text = extract_text_from_image(raw_images[0])
                     st.session_state.student_info = parse_student_info(ocr_text)
                     
@@ -259,7 +306,7 @@ with col1:
                     st.error(f"Execution processing error encountered: {e}")
                     
         if "processed_img" in st.session_state:
-            st.image(st.session_state.processed_img, caption="Dynamically Isolated Answer Enclosure Matrix Box", use_container_width=True)
+            st.image(st.session_state.processed_img, caption="Aligned Frame with Fixed Coordinates Verification Dots", use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
 with col2:
