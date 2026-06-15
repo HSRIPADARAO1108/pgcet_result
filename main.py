@@ -138,7 +138,6 @@ if not img_base64:
     st.info("💡 Tip: Save your visual banner element inside your project folder directory explicitly named as `kea_banner.jpg` to display your personalized header.")
 
 # ─────────────────────────── Session States ───────────────────────────
-# Fix: Initialize all elements correctly to avoid AttributeError/KeyError
 for key in ["omr_answers", "student_info", "results"]:
     if key not in st.session_state:
         st.session_state[key] = None
@@ -169,12 +168,14 @@ def parse_student_info(ocr_text):
     info = {"name": "", "reg_no": ""}
     lines = [l.strip() for l in ocr_text.split('\n') if l.strip()]
     
+    # Target 9-digit strings precisely to lock onto 249171118 instead of the 5-digit booklet number
     for line in lines:
-        reg_match = re.search(r'\b(\d{9,12})\b', line)
+        reg_match = re.search(r'\b(\d{9})\b', line)
         if reg_match:
             info["reg_no"] = reg_match.group(1)
             break
             
+    # Fallback to look for general 6 to 12 digit combinations if a exact 9-digit block isn't verified
     if not info["reg_no"]:
         for line in lines:
             if "booklet" in line.lower() or "serial" in line.lower():
@@ -415,7 +416,6 @@ with col2:
     st.markdown('<div class="step-card">', unsafe_allow_html=True)
     st.markdown("#### <span class='step-label'>2</span> Extracted Registration Profiles", unsafe_allow_html=True)
 
-    # Fix: Fetch safely from state with a proper fallback mechanism
     current_info = st.session_state.student_info if st.session_state.student_info is not None else {"name": "", "reg_no": ""}
     
     student_name = st.text_input("👤 Student Name", value=current_info.get("name", ""), placeholder="Enter full name")
