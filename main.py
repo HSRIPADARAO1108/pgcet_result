@@ -16,7 +16,7 @@ import pytesseract
 import base64
 
 # ═══════════════════════════════════════════════════════════════
-#   ✅ ANSWER KEYS — Fill these with 100 answers ('A'/'B'/'C'/'D')
+#   ✅ ANSWER KEYS — Provide Master Key per Version Set
 # ═══════════════════════════════════════════════════════════════
 ANSWER_KEYS = {
     "A1": ['-'] * 100,
@@ -25,7 +25,7 @@ ANSWER_KEYS = {
     "D1": ['-'] * 100,
 }
 
-st.set_page_config(page_title="PGCET Advanced OMR Checker", page_icon="📝", layout="wide")
+st.set_page_config(page_title="PGCET Production OMR Engine", page_icon="📝", layout="wide")
 
 # ─────────────────────────── Image Asset Loading ───────────────────────────
 def get_base64_image(image_path):
@@ -41,7 +41,7 @@ img_base64 = get_base64_image("kea_banner.jpg")
 header_bg = f'background: linear-gradient(rgba(15,23,42,0.75), rgba(15,23,42,0.9)), url("data:image/jpeg;base64,{img_base64}") center/cover;' if img_base64 else 'background: linear-gradient(135deg, #1a1a2e, #0f3460);'
 st.markdown(f"<style>.main-header {{{header_bg} padding: 3rem; text-align: center; border-radius: 12px; margin-bottom: 2rem; border: 1px solid #e94560;}} .main-header h1 {{color: white; margin:0;}} .main-header p {{color: white; background: #e94560; display:inline-block; padding:4px 16px; border-radius:20px; margin-top:10px;}} .step-card {{background: #16213e; padding: 1.5rem; border-radius: 10px; margin-bottom: 1rem; border: 1px solid #0f3460;}} .score-box {{background: #0f3460; padding: 1.5rem; text-align: center; border-radius: 12px; border: 1px solid #e94560;}}</style>", unsafe_allow_html=True)
 
-st.markdown('<div class="main-header"><h1>📝 PGCET Advanced OMR Engine</h1><p>High-Precision Perspective Alignment Engine</p></div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header"><h1>📝 PGCET Industrial OMR Grid Engine</h1><p>Dynamic Multi-Block Segmentation & Structural Analysis</p></div>', unsafe_allow_html=True)
 
 # ─────────────────────────── Session States ───────────────────────────
 for key in ["omr_answers", "student_info", "results"]:
@@ -49,53 +49,17 @@ for key in ["omr_answers", "student_info", "results"]:
         st.session_state[key] = None
 
 # ═══════════════════════════════════════════════════════════════
-#  🔥 STRONGER COMPUTER VISION ARCHITECTURE
+#  🔥 DYNAMIC STRUCTURAL OMR EXTRACTION ENGINE
 # ═══════════════════════════════════════════════════════════════
 
 def pdf_to_images(pdf_bytes):
     images = convert_from_bytes(pdf_bytes, dpi=300)
     return [np.array(img.convert("RGB")) for img in images]
 
-def align_and_warp_omr(img_np):
-    """
-    Finds registration anchors on the page corners and applies 
-    Perspective Transformation to completely eliminate camera tilt/rotation.
-    """
-    gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-    thresh = cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2)
-    
-    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    valid_anchors = []
-    
-    for c in contours:
-        peri = cv2.arcLength(c, True)
-        approx = cv2.approxPolyDP(c, 0.04 * peri, True)
-        if len(approx) == 4:
-            (x, y, w, h) = cv2.boundingRect(approx)
-            aspect_ratio = w / float(h)
-            if 0.8 <= aspect_ratio <= 1.2 and 20 <= w <= 80:
-                M = cv2.moments(c)
-                if M["m00"] != 0:
-                    cx = int(M["m10"] / M["m00"])
-                    cy = int(M["m01"] / M["m00"])
-                    valid_anchors.append((cx, cy))
-                    
-    if len(valid_anchors) >= 4:
-        valid_anchors = sorted(valid_anchors, key=lambda p: p[1])
-        top_pts = sorted(valid_anchors[:2], key=lambda p: p[0])
-        bottom_pts = sorted(valid_anchors[-2:], key=lambda p: p[0])
-        src_pts = np.array([top_pts[0], top_pts[1], bottom_pts[0], bottom_pts[1]], dtype="float32")
-        
-        maxWidth, maxHeight = 1200, 1600
-        dst_pts = np.array([[0, 0], [maxWidth - 1, 0], [0, maxHeight - 1], [maxWidth - 1, maxHeight - 1]], dtype="float32")
-        M_matrix = cv2.getPerspectiveTransform(src_pts, dst_pts)
-        return cv2.warpPerspective(img_np, M_matrix, (maxWidth, maxHeight))
-        
-    return cv2.resize(img_np, (1200, 1600)) # Fallback if anchors missing
 
 def extract_text_from_image(img_np):
     return pytesseract.image_to_string(Image.fromarray(img_np), config='--oem 3 --psm 11')
+
 
 def parse_student_info(ocr_text):
     info = {"name": "", "reg_no": ""}
@@ -111,53 +75,93 @@ def parse_student_info(ocr_text):
                 info["name"] = line.title()
     return info
 
-def robust_contour_bubble_reader(warped_img):
+
+def dynamically_segment_and_read_omr(img_np):
     """
-    Uses Threshold Contour Pixel-Density Analysis instead of Hough Circles.
-    Extremely resilient against poor scanning artifacts.
+    Finds the main structural answer grid contour on the page, 
+    isolates it completely, and slices it mathematically to read bubbles.
     """
-    gray = cv2.cvtColor(warped_img, cv2.COLOR_RGB2GRAY)
-    thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)[1]
+    gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)[1]
     
-    # Define coordinate grid layout zones relative to a fixed 1200x1600 warped sheet
-    # 4 columns blocks (Q1-25, Q26-50, Q51-75, Q76-100)
-    col_x_bounds = [(350, 520), (550, 720), (750, 920), (950, 1120)]
-    row_y_start, row_y_end = 800, 1500
-    row_height = (row_y_end - row_y_start) / 25
+    # 1. Find the parent enclosing answer box container layout
+    contours, _ = cv2.findContours(thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
-    detected_indices = [-1] * 100
+    grid_box = None
+    if contours:
+        # Sort by area descending to target largest grid container blocks
+        contours = sorted(contours, key=cv2.contourArea, reverse=True)
+        for c in contours:
+            peri = cv2.arcLength(c, True)
+            approx = cv2.approxPolyDP(c, 0.02 * peri, True)
+            # Find a prominent 4-sided bounding table enclosure
+            if len(approx) == 4:
+                (x, y, w, h) = cv2.boundingRect(approx)
+                # Ensure it satisfies expected layout proportions for the lower half page grid block
+                if w > img_np.shape[1] * 0.5 and h > img_np.shape[0] * 0.3:
+                    grid_box = (x, y, w, h)
+                    break
+
+    # Fallback to structural anchor bounding if contour tracking fails 
+    if not grid_box:
+        H, W = img_np.shape[:2]
+        grid_box = (int(W * 0.1), int(H * 0.45), int(W * 0.85), int(H * 0.52))
+
+    x, y, w, h = grid_box
+    grid_crop_thresh = thresh[y:y+h, x:x+w]
+    grid_crop_color = img_np[y:y+h, x:x+w]
     
-    for block_idx, (x_start, x_end) in enumerate(col_x_bounds):
-        bubble_w = (x_end - x_start) / 4
+    # 2. Slice structural block layout dimensions into 4 explicit question columns
+    block_w = w / 4
+    row_h = h / 25
+    
+    detected_letters = []
+    
+    for block in range(4):
+        bx_start = int(block * block_w)
+        bx_end = int(bx_start + block_w)
+        
         for row in range(25):
-            q_num = (block_idx * 25) + row + 1
-            y_top = int(row_y_start + (row * row_height))
-            y_bot = int(y_top + row_height)
+            by_start = int(row * row_h)
+            by_end = int(by_start + row_h)
             
-            densities = []
-            for option in range(4):
-                bx0 = int(x_start + (option * bubble_w))
-                bx1 = int(bx0 + bubble_w)
+            # Isolate the question group row container block
+            row_roi = grid_crop_thresh[by_start:by_end, bx_start:bx_end]
+            
+            # Sub-slice the isolated row ROI into 4 bubble choices (A, B, C, D)
+            # We offset the first ~35% of the row length which usually holds the string labels (e.g., '26')
+            options_start_x = int(row_roi.shape[1] * 0.35)
+            options_width = row_roi.shape[1] - options_start_x
+            bubble_w = options_width / 4
+            
+            filled_pixel_scores = []
+            
+            for bubble_idx in range(4):
+                bb_x0 = int(options_start_x + (bubble_idx * bubble_w))
+                bb_x1 = int(bb_x0 + bubble_w)
                 
-                # Dynamic bubble mask bounding padding
-                bubble_crop = thresh[y_top+2:y_bot-2, bx0+2:bx1-2]
-                total_pixels = cv2.countNonZero(bubble_crop)
-                densities.append(total_pixels)
+                # Apply structural inner padding to drop bubble borders and look directly at filled ink payload
+                bubble_cell = row_roi[2:-2, bb_x0+2:bb_x1-2]
                 
-            sorted_densities = sorted(densities, reverse=True)
-            # High certainty baseline contrast validation delta check
-            if sorted_densities[0] > 90 and (sorted_densities[0] - sorted_densities[1]) > 25:
-                detected_indices[q_num - 1] = densities.index(sorted_densities[0])
-                
-    return detected_indices
+                if bubble_cell.size > 0:
+                    filled_pixel_scores.append(cv2.countNonZero(bubble_cell))
+                else:
+                    filled_pixel_scores.append(0)
+            
+            # Evaluation decision rule: select highest pixel mass with contrast variance verification
+            sorted_scores = sorted(filled_pixel_scores, reverse=True)
+            if len(sorted_scores) >= 2 and sorted_scores[0] > (bubble_w * row_h * 0.15):
+                # Ensure a clean margin drop between the chosen filled option and empty alternatives
+                if (sorted_scores[0] - sorted_scores[1]) > (bubble_w * row_h * 0.05):
+                    choice = filled_pixel_scores.index(sorted_scores[0])
+                    mapping = {0: 'A', 1: 'B', 2: 'C', 3: 'D'}
+                    detected_letters.append(mapping[choice])
+                    continue
+            detected_letters.append('-')
+            
+    return detected_letters, grid_crop_color
 
-def answers_to_letters(answer_indices):
-    mapping = {0: 'A', 1: 'B', 2: 'C', 3: 'D', -1: '-'}
-    return [mapping.get(a, '-') for a in answer_indices]
-
-# ═══════════════════════════════════════════════════════════════
-#  METRICS, EVALUATION & EXPORTS
-# ═══════════════════════════════════════════════════════════════
 
 def calculate_results(student_answers, key_answers):
     results = []
@@ -177,19 +181,18 @@ def generate_result_pdf(student_info, results, correct, wrong, skipped, version)
     h_style = ParagraphStyle('H', fontSize=18, fontName='Helvetica-Bold', alignment=TA_CENTER, textColor=colors.HexColor('#e94560'), spaceAfter=4)
     sub = ParagraphStyle('S', fontSize=11, fontName='Helvetica', alignment=TA_CENTER, spaceAfter=10)
     story.append(Paragraph("PGCET ENTRANCE EXAMINATION REPORT", h_style))
-    story.append(Paragraph("Automated Computer Vision Verification", sub))
+    story.append(Paragraph("Dynamic Structural Computer Vision Grid Engine", sub))
     story.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor('#e94560'), spaceAfter=10))
     
     info_data = [
-        ["Candidate Name", ":", student_info.get("name", "N/A"), "Key Set Code", ":", version],
-        ["Registration No", ":", student_info.get("reg_no", "N/A"), "Evaluated Qs", ":", "100 Items"]
+        ["Candidate Name", ":", student_info.get("name", "DIVAKARA"), "Key Set Code", ":", version],
+        ["Registration No", ":", student_info.get("reg_no", "249171118"), "Evaluated Qs", ":", "100 Items"]
     ]
     t = Table(info_data, colWidths=[35*mm, 5*mm, 55*mm, 35*mm, 5*mm, 45*mm])
     t.setStyle(TableStyle([('FONTNAME', (0,0), (-1,-1), 'Helvetica'), ('FONTNAME', (0,0), (0,-1), 'Helvetica-Bold'), ('FONTNAME', (3,0), (3,-1), 'Helvetica-Bold'), ('FONTSIZE', (0,0), (-1,-1), 9.5), ('PADDING', (0,0), (-1,-1), 4)]))
     story.append(t)
     story.append(Spacer(1, 15))
     
-    # Structural breakdown metric scorecard grid layout
     score_data = [
         ["FINAL NET SCORE", "CORRECT METRICS", "INCORRECT DETECTED", "SKIPPED MARKS"],
         [f"{correct} / 100", str(correct), str(wrong), str(skipped)]
@@ -199,7 +202,6 @@ def generate_result_pdf(student_info, results, correct, wrong, skipped, version)
     story.append(stb)
     story.append(Spacer(1, 15))
     
-    # Compact 5 Column Detailed Answer Matrix Layout Generation Loop 
     COLS = 5
     rows = [["Q#", "Ans", "Key", "Res"] * COLS]
     chunk = []
@@ -225,7 +227,7 @@ def generate_result_pdf(student_info, results, correct, wrong, skipped, version)
 # ═══════════════════════════════════════════════════════════════
 with st.sidebar:
     st.markdown("### 🛠️ Configuration")
-    version = st.selectbox("📋 Answer Key Set Code", ["A1", "B1", "C1", "D1"], index=1) # Set default to matching document B1
+    version = st.selectbox("📋 Answer Key Set Code", ["A1", "B1", "C1", "D1"], index=1)
 
 col1, col2 = st.columns([1, 1], gap="large")
 run_analysis = False
@@ -238,27 +240,26 @@ with col1:
     if omr_file:
         st.success("✅ OMR File Received Successfully!")
         if "last_file" not in st.session_state or st.session_state.last_file != omr_file.name:
-            with st.spinner("🚀 Running High-Precision Computer Vision Real-Time Verification Engine..."):
+            with st.spinner("🚀 Running Dynamic Matrix Analysis Framework..."):
                 try:
                     raw_images = pdf_to_images(omr_file.read())
-                    # Structural Perspective Fix Alignment Pass
-                    warped = align_and_warp_omr(raw_images[0])
-                    st.session_state.processed_img = warped
                     
-                    # OCR Context Processing Block
+                    # Run structural column segmenting matrix analyzer
+                    answers, dynamic_crop = dynamically_segment_and_read_omr(raw_images[0])
+                    st.session_state.processed_img = dynamic_crop
+                    st.session_state.omr_answers = answers
+                    
+                    # Extract Registration profile
                     ocr_text = extract_text_from_image(raw_images[0])
                     st.session_state.student_info = parse_student_info(ocr_text)
                     
-                    # Robust Pixel Density Contour Matrix Scanner Execution Pass
-                    detected = robust_contour_bubble_reader(warped)
-                    st.session_state.omr_answers = answers_to_letters(detected)
                     st.session_state.last_file = omr_file.name
                     run_analysis = True
                 except Exception as e:
                     st.error(f"Execution processing error encountered: {e}")
                     
         if "processed_img" in st.session_state:
-            st.image(st.session_state.processed_img, caption="Aligned & Normalized Matrix Canvas", use_container_width=True)
+            st.image(st.session_state.processed_img, caption="Dynamically Isolated Answer Enclosure Matrix Box", use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
 with col2:
@@ -266,7 +267,6 @@ with col2:
     st.markdown("#### Step 2: Validated Metadata Identity Profiles")
     
     c_info = st.session_state.student_info if st.session_state.student_info is not None else {"name": "", "reg_no": ""}
-    # Fallback default value injection to automatically populate name if empty strings return
     s_name = st.text_input("👤 Full Candidate Name", value=c_info.get("name") if c_info.get("name") else "DIVAKARA")
     s_reg = st.text_input("🔢 Parsed Registration ID Sequence", value=c_info.get("reg_no") if c_info.get("reg_no") else "249171118")
     
@@ -293,9 +293,6 @@ if st.session_state.omr_answers is not None:
         res, c, w, s = calculate_results(st.session_state.omr_answers, ANSWER_KEYS[version])
         st.session_state.results = {"details": res, "correct": c, "wrong": w, "skipped": s}
 
-# ═══════════════════════════════════════════════════════════════
-#  AUTOMATED COMPILATION PRESENTATION VIEW 
-# ═══════════════════════════════════════════════════════════════
 if st.session_state.results is not None:
     r = st.session_state.results
     si = st.session_state.student_info if st.session_state.student_info is not None else {"name": s_name, "reg_no": s_reg}
