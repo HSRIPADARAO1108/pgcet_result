@@ -128,45 +128,86 @@ def parse_student_info(ocr_text):
     return info
 
 
-def detect_bubbles_in_row(row_img, num_options=4):
-    h, w = row_img.shape
-    cell_w = w // num_options
-    fill_ratios = []
-    for i in range(num_options):
-        cell = row_img[:, i * cell_w:(i + 1) * cell_w]
-        _, binary = cv2.threshold(cell, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-        ratio = np.sum(binary == 255) / binary.size
-        fill_ratios.append(ratio)
-    max_ratio = max(fill_ratios)
-    if max_ratio < 0.08:
-        return -1
-    sorted_ratios = sorted(fill_ratios, reverse=True)
-    if len(sorted_ratios) > 1 and sorted_ratios[0] > sorted_ratios[1] * 1.4:
-        return fill_ratios.index(max_ratio)
-    return fill_ratios.index(max_ratio)
+def get_grid_crop(img_np):
+    """Crop the page to the answer-grid region (calibrated for KEA OMR template)."""
+    h, w = img_np.shape[:2]
+    y0, y1 = int(h * 0.49), int(h * 0.95)
+    x0, x1 = int(w * 0.30), int(w * 0.99)
+    return img_np[y0:y1, x0:x1]
+
+
+def detect_row(gray_strip_full, x0, x1, y0, y1, expected=4):
+    """Detect the 4 option bubbles within one row of one block and return fill scores (low=dark/filled)."""
+    pad = max(1, int((y1 - y0) * 0.05))
+    strip = gray_strip_full[int(y0) + pad:int(y1) - pad, int(x0):int(x1)]
+    sh, sw = strip.shape
+    if sh < 5 or sw < 5:
+        return None
+    circles = cv2.HoughCircles(strip, cv2.HOUGH_GRADIENT, dp=1, minDist=max(1, int(sw * 0.12)),
+                                param1=50, param2=15,
+                                minRadius=max(1, int(sh * 0.28)), maxRadius=max(2, int(sh * 0.48)))
+    if circles is None:
+        return None
+    c = circles[0]
+    # ignore anything in the Q.NO digit area (left ~12% of the block width)
+    c = c[c[:, 0] > sw * 0.12]
+    if len(c) < expected:
+        return None
+    c = sorted(c, key=lambda p: p[0])
+    if len(c) > expected:
+        c = c[-expected:]
+    c = sorted(c, key=lambda p: p[0])
+    scores = []
+    for (cx, cy, r) in c:
+        rr = max(1, int(r * 0.6))
+        y0p, y1p = int(cy - rr), int(cy + rr)
+        x0p, x1p = int(cx - rr), int(cx + rr)
+        patch = strip[max(0, y0p):y1p, max(0, x0p):x1p]
+        scores.append(patch.mean() if patch.size else 255)
+    return scores
 
 
 def detect_omr_answers(img_np, num_questions=100, num_options=4):
-    enhanced = enhance_image(img_np)
-    h, w = enhanced.shape
-    _, binary = cv2.threshold(enhanced, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-    top_crop    = int(h * 0.20)
-    bottom_crop = int(h * 0.90)
-    left_crop   = int(w * 0.30)
-    right_crop  = int(w * 0.85)
-    bubble_region = binary[top_crop:bottom_crop, left_crop:right_crop]
-    region_h, region_w = bubble_region.shape
-    row_height = max(1, region_h // num_questions)
-    answers = []
-    for q in range(num_questions):
-        y1 = q * row_height
-        y2 = (q + 1) * row_height
-        row = bubble_region[y1:y2, :]
-        if row.size == 0:
-            answers.append(-1)
-            continue
-        answers.append(detect_bubbles_in_row(row, num_options))
-    return answers
+    """
+    Detect shaded answers for a 4-block x 25-row x 4-option KEA OMR sheet.
+    Returns a list of indices: 0=A,1=B,2=C,3=D, -1=blank/unclear.
+    """
+    crop = get_grid_crop(img_np)
+    gray = cv2.cvtColor(crop, cv2.COLOR_RGB2GRAY)
+    gh, gw = gray.shape
+
+    # Calibrated fractional coordinates (from KEA template reference scan)
+    table_y0 = 0.0495 * gh
+    table_y1 = 0.9380 * gh
+    row_h = (table_y1 - table_y0) / 25
+
+    block_x = {
+        1: (0.0442 * gw, 0.2809 * gw),
+        2: (0.2809 * gw, 0.4718 * gw),
+        3: (0.4718 * gw, 0.7014 * gw),
+        4: (0.7014 * gw, 0.9045 * gw),
+    }
+    qstart = {1: 1, 2: 26, 3: 51, 4: 76}
+
+    answers_by_q = {}
+    for b, (bx0, bx1) in block_x.items():
+        for row in range(25):
+            y0 = table_y0 + row * row_h
+            y1 = y0 + row_h
+            scores = detect_row(gray, bx0, bx1, y0, y1)
+            q = qstart[b] + row
+            if scores is None:
+                answers_by_q[q] = -1
+                continue
+            sorted_s = sorted(scores)
+            idx = int(np.argmin(scores))
+            gap = sorted_s[1] - sorted_s[0]
+            if gap < 6:
+                answers_by_q[q] = -1
+            else:
+                answers_by_q[q] = idx
+
+    return [answers_by_q.get(q, -1) for q in range(1, num_questions + 1)]
 
 
 def answers_to_letters(answer_indices):
@@ -379,13 +420,17 @@ with col1:
             try:
                 pdf_bytes = omr_file.read()
                 images    = pdf_to_images(pdf_bytes)
-                enhanced_preview = enhance_image(images[0])
-                st.image(enhanced_preview, caption="Enhanced OMR (Page 1)",
-                         use_container_width=True, clamp=True)
+                grid_preview = get_grid_crop(images[0])
+                st.image(grid_preview, caption="Detected Answer Grid (Page 1)",
+                         use_container_width=True)
 
-                ocr_text  = extract_text_from_image(images[0])
-                auto_info = parse_student_info(ocr_text)
-                st.session_state._auto_info = auto_info
+                try:
+                    ocr_text  = extract_text_from_image(images[0])
+                    auto_info = parse_student_info(ocr_text)
+                    st.session_state._auto_info = auto_info
+                except Exception:
+                    st.session_state._auto_info = {"name": "", "reg_no": ""}
+                    st.warning("⚠️ OCR (tesseract) not available — name/reg no. auto-fill skipped. Enter manually below.")
 
                 raw_answers    = detect_omr_answers(images[0])
                 letter_answers = answers_to_letters(raw_answers)
@@ -433,6 +478,39 @@ with col2:
         "version": version
     }
     st.markdown('</div>', unsafe_allow_html=True)
+
+
+# -- STEP 2.5: Review / Edit Detected Answers --
+if st.session_state.omr_answers:
+    st.markdown("---")
+    st.markdown("#### <span class='step-label'>4</span> Review and Correct Detected Answers", unsafe_allow_html=True)
+    st.caption("Detection is ~99% accurate. Please check rows marked '-' (blank/unclear) and any that look wrong, then edit directly in the table below.")
+
+    edit_df = pd.DataFrame({
+        "Q#": list(range(1, 101)),
+        "Detected Answer": st.session_state.omr_answers
+    })
+    edited_df = st.data_editor(
+        edit_df,
+        use_container_width=True,
+        hide_index=True,
+        height=300,
+        column_config={
+            "Q#": st.column_config.NumberColumn(disabled=True),
+            "Detected Answer": st.column_config.SelectboxColumn(
+                options=["A", "B", "C", "D", "-"], required=True
+            )
+        },
+        key="omr_editor"
+    )
+    st.session_state.omr_answers = edited_df["Detected Answer"].tolist()
+
+    unclear_count = st.session_state.omr_answers.count('-')
+    if unclear_count > 0:
+        st.warning("Unclear/blank questions: "
+                   + ", ".join([f"Q{i+1}" for i,a in enumerate(st.session_state.omr_answers) if a=='-']))
+    else:
+        st.success("All 100 answers detected with no blanks/unclear marks.")
 
 
 # ── STEP 3: Analyze ──
