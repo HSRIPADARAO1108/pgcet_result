@@ -16,7 +16,7 @@ import pytesseract
 import base64
 
 # ═══════════════════════════════════════════════════════════════
-#   ✅ ANSWER KEYS — Provide Master Key per Version Set
+#   ✅ MASTER KEY REGISTRY
 # ═══════════════════════════════════════════════════════════════
 ANSWER_KEYS = {
     "A1": ['-'] * 100,
@@ -25,41 +25,7 @@ ANSWER_KEYS = {
     "D1": ['-'] * 100,
 }
 
-# ═══════════════════════════════════════════════════════════════
-#   🎯 LEVEL 5: IMMUTABLE COORDINATE MAP TEMPLATE (1200 x 1650 Canvas)
-# ═══════════════════════════════════════════════════════════════
-def generate_pgcet_template_map():
-    """
-    Generates precision fixed-coordinate mapping arrays for KEA PGCET layout.
-    Tracks 4 parallel vertical tracks of 25 questions each across a 1200x1650 canvas.
-    """
-    template_map = {}
-    
-    # Precise anchor starts for columns 1-25, 26-50, 51-75, 76-100
-    col_x_starts = [125, 410, 695, 980]
-    row_y_start = 760
-    row_gap = 32.5
-    bubble_gap = 31
-    
-    for block in range(4):
-        x_base = col_x_starts[block]
-        for row in range(25):
-            q_num = (block * 25) + row + 1
-            y_center = int(row_y_start + (row * row_gap))
-            
-            # Map four horizontal options (A, B, C, D) coordinates
-            options_coords = []
-            for opt in range(4):
-                x_center = int(x_base + (opt * bubble_gap))
-                options_coords.append((x_center, y_center))
-                
-            template_map[q_num] = options_coords
-            
-    return template_map
-
-QUESTION_MAP = generate_pgcet_template_map()
-
-st.set_page_config(page_title="PGCET Industrial Template Engine", page_icon="📝", layout="wide")
+st.set_page_config(page_title="PGCET Production OMR Engine", page_icon="📝", layout="wide")
 
 # ─────────────────────────── Image Asset Loading ───────────────────────────
 def get_base64_image(image_path):
@@ -75,7 +41,7 @@ img_base64 = get_base64_image("kea_banner.jpg")
 header_bg = f'background: linear-gradient(rgba(15,23,42,0.75), rgba(15,23,42,0.9)), url("data:image/jpeg;base64,{img_base64}") center/cover;' if img_base64 else 'background: linear-gradient(135deg, #1a1a2e, #0f3460);'
 st.markdown(f"<style>.main-header {{{header_bg} padding: 3rem; text-align: center; border-radius: 12px; margin-bottom: 2rem; border: 1px solid #e94560;}} .main-header h1 {{color: white; margin:0;}} .main-header p {{color: white; background: #e94560; display:inline-block; padding:4px 16px; border-radius:20px; margin-top:10px;}} .step-card {{background: #16213e; padding: 1.5rem; border-radius: 10px; margin-bottom: 1rem; border: 1px solid #0f3460;}} .score-box {{background: #0f3460; padding: 1.5rem; text-align: center; border-radius: 12px; border: 1px solid #e94560;}}</style>", unsafe_allow_html=True)
 
-st.markdown('<div class="main-header"><h1>📝 PGCET Industrial Template Engine</h1><p>Level 1-5 Production-Grade Coordinate Registration Architecture</p></div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header"><h1>📝 PGCET Industrial Template Engine</h1><p>Anchor-Registered Layout Coordinate Alignment Architecture</p></div>', unsafe_allow_html=True)
 
 # ─────────────────────────── Session States ───────────────────────────
 for key in ["omr_answers", "student_info", "results"]:
@@ -83,7 +49,7 @@ for key in ["omr_answers", "student_info", "results"]:
         st.session_state[key] = None
 
 # ═══════════════════════════════════════════════════════════════
-#  🔥 THE FIVE LEVELS COMPUTER VISION ARCHITECTURE
+#  🔥 LEVEL 1 & 2: PERSPECTIVE ALIGNMENT UTILITIES
 # ═══════════════════════════════════════════════════════════════
 
 def pdf_to_images(pdf_bytes):
@@ -91,7 +57,6 @@ def pdf_to_images(pdf_bytes):
     return [np.array(img.convert("RGB")) for img in images]
 
 
-# LEVEL 1: Perspective Correction Transformation
 def four_point_transform(image, pts):
     rect = np.zeros((4, 2), dtype="float32")
     s = pts.sum(axis=1)
@@ -104,7 +69,7 @@ def four_point_transform(image, pts):
 
     (tl, tr, br, bl) = rect
     
-    # Establish a rigid master digital viewport matrix canvas
+    # Establish standard high-resolution processing canvas dimensions
     maxWidth, maxHeight = 1200, 1650
     
     dst = np.array([
@@ -118,8 +83,10 @@ def four_point_transform(image, pts):
     return cv2.warpPerspective(image, M, (maxWidth, maxHeight))
 
 
-# LEVEL 2 & 3: Page Contour Isolation & Adaptive Threshold Tracking
 def process_and_align_sheet(img_np):
+    """
+    Isolates outer document contours and computes adaptive thresh targets.
+    """
     gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
     blur = cv2.GaussianBlur(gray, (5, 5), 0)
     edged = cv2.Canny(blur, 75, 200)
@@ -135,7 +102,6 @@ def process_and_align_sheet(img_np):
             paper = approx
             break
 
-    # If the edge tracker fails due to low edge contrast, fall back on direct dimensions layout normalization
     if paper is None:
         H, W = img_np.shape[:2]
         paper = np.array([[0, 0], [W, 0], [W, H], [0, H]])
@@ -143,7 +109,6 @@ def process_and_align_sheet(img_np):
     warped_color = four_point_transform(img_np, paper.reshape(4, 2))
     warped_gray = cv2.cvtColor(warped_color, cv2.COLOR_RGB2GRAY)
     
-    # Clean up ink payloads with specialized adaptive tracking
     thresh = cv2.adaptiveThreshold(
         warped_gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
         cv2.THRESH_BINARY_INV, 25, 15
@@ -151,40 +116,106 @@ def process_and_align_sheet(img_np):
     
     return warped_color, thresh
 
+# ═══════════════════════════════════════════════════════════════
+#  🎯 LEVEL 5: ANCHOR-BASED DYNAMIC TEMPLATE GENERATOR
+# ═══════════════════════════════════════════════════════════════
 
-# LEVEL 4 & 5: Fixed Template Mapping & Density Extractions
+def build_registered_question_map(thresh):
+    """
+    Scans the lower section of the page to find layout markers, 
+    then projects a customized mapping coordinate matrix template grid.
+    """
+    H, W = thresh.shape[:2]
+    
+    # KEA sheets contain distinct bounding boxes or block borders 
+    # around the answer sections. Let's find the physical answer block sub-region.
+    contours, _ = cv2.findContours(thresh.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    
+    grid_x, grid_y, grid_w, grid_h = None, None, None, None
+    for c in contours:
+        x, y, w, h = cv2.boundingRect(c)
+        # Identify bounding box that covers the bottom half answer area
+        if w > W * 0.75 and h > H * 0.45 and y > H * 0.35:
+            grid_x, grid_y, grid_w, grid_h = x, y, w, h
+            break
+            
+    # Fallback default geometry parameters if page container boundaries aren't isolated cleanly
+    if not grid_x:
+        grid_x, grid_y, grid_w, grid_h = int(W * 0.06), int(H * 0.45), int(W * 0.88), int(H * 0.51)
+
+    # Re-calculate accurate step metrics scaling from isolated sheet dimensions
+    block_w = grid_w / 4.0
+    row_h = grid_h / 25.0
+    
+    question_map = {}
+    
+    for block in range(4):
+        col_start_x = grid_x + (block * block_w)
+        # Shift past printed text identifiers ('1', '26', etc.) into options track area
+        options_x_offset = col_start_x + (block_w * 0.35)
+        bubble_width_step = (col_start_x + block_w - options_x_offset) / 4.0
+        
+        for row in range(25):
+            q_num = (block * 25) + row + 1
+            y_center = int(grid_y + (row * row_h) + (row_h / 2.0))
+            
+            options_coords = []
+            for opt in range(4):
+                x_center = int(options_x_offset + (opt * bubble_width_step) + (bubble_width_step / 2.0))
+                options_coords.append((x_center, y_center))
+                
+            question_map[q_num] = options_coords
+            
+    return question_map
+
+
 def extract_answers_via_template(warped_color, thresh):
+    """
+    Evaluates bubble pixels relative to the generated layout template map.
+    """
+    # Build localized coordinate registry template based on current document structure
+    dynamic_map = build_registered_question_map(thresh)
+    
     detected_letters = []
     mapping = {0: 'A', 1: 'B', 2: 'C', 3: 'D'}
     canvas = warped_color.copy()
 
     for q in range(1, 101):
-        scores = []
-        for option in range(4):
-            cx, cy = QUESTION_MAP[q][option]
+        if q not in dynamic_map:
+            detected_letters.append('-')
+            continue
             
-            # Extract localized Region of Interest (ROI) bounding circle
-            roi = thresh[cy-11:cy+11, cx-11:cx+11]
-            score = cv2.countNonZero(roi)
+        scores = []
+        coords = dynamic_map[q]
+        
+        for option in range(4):
+            cx, cy = coords[option]
+            
+            # Bound an isolated local region matrix cell
+            roi = thresh[cy-12:cy+12, cx-12:cx+12]
+            score = cv2.countNonZero(roi) if roi.size > 0 else 0
             scores.append(score)
 
         sorted_scores = sorted(scores, reverse=True)
-        # Verify if bubble filling exceeds a standard target ink-mass density threshold
-        if sorted_scores[0] > 140:
-            # Enforce a strict difference gap margin between filled and empty selections
-            if (sorted_scores[0] - sorted_scores[1]) > 50:
+        # Verify if dark pixel ratio matches filled ink expectations
+        if sorted_scores[0] > 110:
+            # Enforce contrast separation from alternative options
+            if (sorted_scores[0] - sorted_scores[1]) > 40:
                 chosen_opt = scores.index(sorted_scores[0])
                 detected_letters.append(mapping[chosen_opt])
                 
-                # Highlight recognized selections on the UI image canvas
-                tx, ty = QUESTION_MAP[q][chosen_opt]
-                cv2.circle(canvas, (tx, ty), 12, (233, 69, 96), 3)
+                # Draw validation mark over verification target stream
+                tx, ty = coords[chosen_opt]
+                cv2.circle(canvas, (tx, ty), 14, (233, 69, 96), 3)
                 continue
                 
         detected_letters.append('-')
 
     return detected_letters, canvas
 
+# ═══════════════════════════════════════════════════════════════
+#  📋 OCR & METADATA PROFILING ENGINES
+# ═══════════════════════════════════════════════════════════════
 
 def extract_text_from_image(img_np):
     return pytesseract.image_to_string(Image.fromarray(img_np), config='--oem 3 --psm 11')
@@ -224,7 +255,7 @@ def generate_result_pdf(student_info, results, correct, wrong, skipped, version)
     h_style = ParagraphStyle('H', fontSize=18, fontName='Helvetica-Bold', alignment=TA_CENTER, textColor=colors.HexColor('#e94560'), spaceAfter=4)
     sub = ParagraphStyle('S', fontSize=11, fontName='Helvetica', alignment=TA_CENTER, spaceAfter=10)
     story.append(Paragraph("PGCET ENTRANCE EXAMINATION REPORT", h_style))
-    story.append(Paragraph("Industrial Template Coordinate Mapping System", sub))
+    story.append(Paragraph("Anchor Registered Template Alignment System", sub))
     story.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor('#e94560'), spaceAfter=10))
     
     info_data = [
@@ -283,20 +314,20 @@ with col1:
     if omr_file:
         st.success("✅ OMR File Received Successfully!")
         if "last_file" not in st.session_state or st.session_state.last_file != omr_file.name:
-            with st.spinner("🚀 Performing Template Matrix Registration Analysis..."):
+            with st.spinner("🚀 Booting Registration Anchor Tracker Mapping System..."):
                 try:
                     raw_images = pdf_to_images(omr_file.read())
                     
-                    # Run Levels 1 to 3: Perspective Normalization
+                    # Levels 1 to 3: Multi-Stage Document Alignment
                     warped_color, thresh = process_and_align_sheet(raw_images[0])
                     
-                    # Run Levels 4 & 5: Static Structural Mapping Engine
+                    # Levels 4 & 5: Registered Layout Evaluation
                     answers, verification_canvas = extract_answers_via_template(warped_color, thresh)
                     
                     st.session_state.processed_img = verification_canvas
                     st.session_state.omr_answers = answers
                     
-                    # Profile Information Data Mining
+                    # OCR Processing Pipeline
                     ocr_text = extract_text_from_image(raw_images[0])
                     st.session_state.student_info = parse_student_info(ocr_text)
                     
@@ -306,7 +337,7 @@ with col1:
                     st.error(f"Execution processing error encountered: {e}")
                     
         if "processed_img" in st.session_state:
-            st.image(st.session_state.processed_img, caption="Aligned Frame with Fixed Coordinates Verification Dots", use_container_width=True)
+            st.image(st.session_state.processed_img, caption="Anchor Registered Coordinates Validation Stream", use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
 with col2:
