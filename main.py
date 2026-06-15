@@ -137,6 +137,12 @@ st.markdown("""
 if not img_base64:
     st.info("💡 Tip: Save your visual banner element inside your project folder directory explicitly named as `kea_banner.jpg` to display your personalized header.")
 
+# ─────────────────────────── Session States ───────────────────────────
+# Fix: Initialize all elements correctly to avoid AttributeError/KeyError
+for key in ["omr_answers", "student_info", "results"]:
+    if key not in st.session_state:
+        st.session_state[key] = None
+
 # ═══════════════════════════════════════════════════════════════
 #  OMR DATA PROCESSING METHODS
 # ═══════════════════════════════════════════════════════════════
@@ -363,13 +369,12 @@ def generate_result_pdf(student_info, results, correct, wrong, skipped, version)
 # ═══════════════════════════════════════════════════════════════
 with st.sidebar:
     st.markdown("### 📋 System Information")
-    st.markdown("This app fully automated processing. Uploading an OMR automatically runs extraction, calculates evaluation, and renders immediate actions.")
+    st.markdown("This app runs automated real-time processing upon file injection.")
     st.markdown("---")
     version = st.selectbox("📋 Default Answer Key Version", ["A1", "B1", "C1", "D1"], index=0)
 
 col1, col2 = st.columns([1, 1], gap="large")
 
-# Use a tracking flag to know if we need to auto-calculate the final outputs
 run_analysis = False
 
 with col1:
@@ -380,7 +385,6 @@ with col1:
 
     if omr_file:
         st.success("✅ OMR PDF detected!")
-        # Automatically process fields if not already done in the session cache
         if "last_uploaded_file" not in st.session_state or st.session_state.last_uploaded_file != omr_file.name:
             with st.spinner("⚡ Running Automated Real-Time Analysis..."):
                 try:
@@ -394,8 +398,7 @@ with col1:
                     except Exception:
                         st.session_state.student_info = {"name": "", "reg_no": ""}
 
-                    letter_answers = answers_to_letters(detect_omr_answers(images[0]))
-                    st.session_state.omr_answers = letter_answers
+                    st.session_state.omr_answers = answers_to_letters(detect_omr_answers(images[0]))
                     st.session_state.last_uploaded_file = omr_file.name
                     run_analysis = True
                 except Exception as e:
@@ -412,20 +415,22 @@ with col2:
     st.markdown('<div class="step-card">', unsafe_allow_html=True)
     st.markdown("#### <span class='step-label'>2</span> Extracted Registration Profiles", unsafe_allow_html=True)
 
-    # Supply default values from auto-extracted state dictionary
-    current_info = st.session_state.student_info or {"name": "", "reg_no": ""}
+    # Fix: Fetch safely from state with a proper fallback mechanism
+    current_info = st.session_state.student_info if st.session_state.student_info is not None else {"name": "", "reg_no": ""}
+    
     student_name = st.text_input("👤 Student Name", value=current_info.get("name", ""), placeholder="Enter full name")
     student_reg = st.text_input("🔢 Registration Number", value=current_info.get("reg_no", ""), placeholder="e.g. 249171118")
 
-    # Sync interactive input changes directly back to state parameters
-    if st.session_state.student_info:
-        if st.session_state.student_info["name"] != student_name or st.session_state.student_info["reg_no"] != student_reg:
+    if st.session_state.student_info is not None:
+        if st.session_state.student_info.get("name") != student_name or st.session_state.student_info.get("reg_no") != student_reg:
             st.session_state.student_info = {"name": student_name, "reg_no": student_reg}
             run_analysis = True
+    else:
+        st.session_state.student_info = {"name": student_name, "reg_no": student_reg}
             
     st.markdown('</div>', unsafe_allow_html=True)
 
-if st.session_state.omr_answers:
+if st.session_state.omr_answers is not None:
     st.markdown("---")
     st.markdown("#### 📝 Edit or Override Extracted Bubbles")
     edit_df = pd.DataFrame({"Q#": list(range(1, 101)), "Detected Answer": st.session_state.omr_answers})
@@ -434,25 +439,23 @@ if st.session_state.omr_answers:
         column_config={"Q#": st.column_config.NumberColumn(disabled=True), "Detected Answer": st.column_config.SelectboxColumn(options=["A", "B", "C", "D", "-"], required=True)}
     )
     
-    # Trigger recalculation cleanly if user manually overrides a bubble value
     if st.session_state.omr_answers != edited_df["Detected Answer"].tolist():
         st.session_state.omr_answers = edited_df["Detected Answer"].tolist()
         run_analysis = True
 
-# Automated calculation logic loop block execution 
-if run_analysis or (st.session_state.omr_answers and not st.session_state.results):
-    results, correct, wrong, skipped = calculate_results(st.session_state.omr_answers, ANSWER_KEYS[version])
-    st.session_state.results = {"details": results, "correct": correct, "wrong": wrong, "skipped": skipped}
+if st.session_state.omr_answers is not None:
+    if run_analysis or st.session_state.results is None:
+        results, correct, wrong, skipped = calculate_results(st.session_state.omr_answers, ANSWER_KEYS[version])
+        st.session_state.results = {"details": results, "correct": correct, "wrong": wrong, "skipped": skipped}
 
 # ═══════════════════════════════════════════════════════════════
 #  AUTOMATED RESULTS PRESENTATION & PDF DELIVERY
 # ═══════════════════════════════════════════════════════════════
-if st.session_state.results:
+if st.session_state.results is not None:
     r = st.session_state.results
     correct, wrong, skipped, details = r["correct"], r["wrong"], r["skipped"], r["details"]
-    si = st.session_state.student_info or {"name": student_name, "reg_no": student_reg}
+    si = st.session_state.student_info if st.session_state.student_info is not None else {"name": student_name, "reg_no": student_reg}
 
-    # Generate printable PDF array bytes instantly behind the scenes
     pdf_bytes = generate_result_pdf(si, details, correct, wrong, skipped, version)
 
     st.markdown("---")
