@@ -60,6 +60,7 @@ else:
     background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
     """
 
+# Python f-string requires ALL literal CSS braces to be doubled {{ }}
 st.markdown(f"""
 <style>
     .main-header {{
@@ -117,7 +118,7 @@ st.markdown(f"""
     .key-status-wait {{ background:#4a3000; color:#faad14; padding:6px 14px; border-radius:8px; font-weight:bold; }}
 
     /* Mobile Responsive Custom Overrides */
-    @media (max-width:768px){
+    @media (max-width:768px){{
         .main-header {{
             padding: 1.5rem 1rem !important;
             background-position: center center !important;
